@@ -42,8 +42,11 @@ Sistem ini tidak menggunakan framework full-stack besar yang berat, melainkan di
 ### Halaman Login
 ![Halaman Login](docs/screenshots/login.png)
 
-### Halaman Dashboard & Setup
+### Halaman Dashboard
 ![Halaman Dashboard](docs/screenshots/dashboard.png)
+
+### Dashboard Demo Lengkap
+![Halaman Dashboard Lengkap](docs/screenshots/dashboard_demo.png)
 
 ---
 
