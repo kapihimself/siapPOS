@@ -1,56 +1,70 @@
-# SiapPOS - Session 1 (Production-Ready Baseline)
+# SiapPOS 🛒
 
-Session 1 sekarang fokus pada fondasi yang usable untuk operasional awal.
+![Dashboard](docs/screenshots/dashboard.png)
 
-## Yang sudah stabil
+SiapPOS adalah sistem Point of Sale (POS) modern yang dirancang untuk menjadi andalan dalam operasional bisnis. Cepat dipakai, rapi datanya, dan siap tumbuh. Berfokus pada kemudahan akses (usability) untuk pengguna lapangan (kasir, manager) namun tetap memiliki fondasi teknis yang kuat untuk skala menengah.
 
-- Login berbasis role (`admin`, `manager`, `cashier`)
-- Tombol `Try Demo` 1 klik
-- Setup bisnis (onboarding) dengan progress bar + checklist go-live
-- Pemilihan template bisnis:
-  - `fnb`
-  - `service`
-  - `retail`
-  - `kelontong_bangunan`
-- Dashboard ringkas dengan KPI utama, checklist kesiapan operasional, dan prioritas minggu pertama
-- UX interaction dasar:
-  - loading state tombol submit
-  - input PIN numeric guard
-  - template card selection highlight
-  - auto-hide success flash
+## ✨ Fitur Utama
 
-## Hardening teknis Session 1
+- **Role-Based Access Control (RBAC):** Memisahkan akses antara `admin` (Owner), `manager`, dan `cashier`.
+- **Onboarding Cerdas & Cepat:** Setup bisnis awal sangat mudah menggunakan checklist *go-live* interaktif.
+- **Dukungan Berbagai Template Bisnis:** Dilengkapi dengan konfigurasi default untuk berbagai jenis bisnis:
+  - F&B (Food and Beverage)
+  - Service (Jasa)
+  - Retail (Toko Ritel)
+  - Kelontong / Bangunan
+- **Dashboard Ringkas:** Menampilkan metrik utama (KPI) harian, tingkat kesiapan operasional, dan notifikasi penting.
+- **Keamanan Lapis Dasar:**
+  - Perlindungan *Cross-Site Request Forgery (CSRF)*.
+  - Implementasi *Security Headers* (X-Frame-Options, X-Content-Type-Options, dll).
+  - Regenerasi Session ID untuk menghindari session fixation.
+  - Numeric guard PIN yang mencegah input di luar batas.
 
-- Session ID regenerate saat login/logout
-- CSRF untuk semua POST form
-- Security headers dasar (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`)
-- Routing fallback `404` dengan tampilan konsisten
+## 🛠 Arsitektur & Teknologi
 
-## Menjalankan aplikasi
+Sistem ini tidak menggunakan framework full-stack besar yang berat, melainkan ditulis menggunakan **Vanilla PHP (PHP 8+)** yang diarsiteki dengan prinsip pengembangan modern untuk memastikan kodenya maintainable dan testable:
 
-```powershell
-cd "C:\Users\LRN KHALID BIN WALID\Desktop\siappos"
-C:\xampp\php\php.exe -S 127.0.0.1:8088 -t public
+1. **Clean Architecture (DDD - Domain Driven Design):**
+   - Aplikasi dipecah ke dalam berbagai domain (`Auth`, `Order`, `Product`, `Settings`).
+   - Kode dipisahkan dari logika bisnis inti (*Domain*) dan cara penyajiannya (*App / UI / HTTP*).
+2. **Repository Pattern:**
+   - Semua akses database diabstraksi menggunakan *Repository*, sehingga memudahkan unit-testing atau migrasi database ke depan.
+   - Saat ini menggunakan **SQLite** (`siappos.sqlite`) untuk portabilitas maksimum dan zero-configuration deployment.
+3. **Event Bus (Pub/Sub Pattern):**
+   - Komunikasi antar domain ditangani melalui sebuah *Event Bus* terpusat (contoh: *OrderCheckedOut* bisa ditangkap domain inventori).
+4. **Data Transfer Objects (DTO):**
+   - Transmisi data antar layer menggunakan DTO yang strongly-typed untuk mengurangi error saat runtime.
+
+---
+
+## 📸 Antarmuka (Screenshots)
+
+### Halaman Login
+![Halaman Login](docs/screenshots/login.png)
+
+### Halaman Dashboard & Setup
+![Halaman Dashboard](docs/screenshots/dashboard.png)
+
+---
+
+## 🚀 Cara Menjalankan
+
+SiapPOS dirancang agar bisa dijalankan di mana saja dengan mudah, tanpa konfigurasi kompleks (zero-config). Cukup PHP dan ekstensi SQLite bawaan.
+
+1. Clone repositori ini ke lokal Anda.
+2. Navigasi ke dalam folder proyek.
+3. Jalankan development server bawaan PHP:
+
+```bash
+php -S 127.0.0.1:8088 -t public
 ```
 
-Buka:
-- `http://127.0.0.1:8088/?page=login`
+4. Buka di browser Anda: `http://127.0.0.1:8088/?page=login`
 
-## Akun lokal pengembangan
+### 🔑 Akun Demo / Development
+Anda dapat masuk menggunakan konfigurasi default berikut:
+- **Owner / Admin:** `owner` | PIN: `1111`
+- **Manager:** `manager` | PIN: `2222`
+- **Cashier:** `cashier` | PIN: `3333`
 
-- `owner / 1111`
-- `manager / 2222`
-- `cashier / 3333`
-
-## Validasi yang sudah dijalankan
-
-- Lint seluruh file PHP: `LINT_OK`
-- Smoke test halaman login: `SMOKE_LOGIN_OK`
-- Smoke test alur onboarding + dashboard: `SMOKE_ONBOARD_DASH_OK`
-
-## Scope sesi berikutnya
-
-- Sesi 2: POS terminal + cart + checkout
-- Sesi 3: Product + stock + stock opname
-- Sesi 4: invoicing + payment full/DP/partial
-- Sesi 5: template F&B recipe/BOM auto-decrement ingredient
+Atau Anda dapat menggunakan tombol **"Try Demo 1 Klik"** di halaman login untuk *fast-track* masuk ke sistem sebagai demo user.
