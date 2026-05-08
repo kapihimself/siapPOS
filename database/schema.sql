@@ -1,25 +1,38 @@
 ﻿PRAGMA foreign_keys = ON;
 
-CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT NOT NULL UNIQUE,
-    full_name TEXT NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('admin', 'manager', 'cashier')),
-    pin_hash TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS outlets (
+CREATE TABLE IF NOT EXISTS businesses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
-    address TEXT,
-    phone TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_id INTEGER NOT NULL,
+    username TEXT NOT NULL,
+    full_name TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('admin', 'manager', 'cashier')),
+    pin_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(business_id, username),
+    FOREIGN KEY (business_id) REFERENCES businesses(id)
+);
+
+CREATE TABLE IF NOT EXISTS outlets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    address TEXT,
+    phone TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (business_id) REFERENCES businesses(id)
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_id INTEGER NOT NULL,
     business_name TEXT NOT NULL,
     outlet_name TEXT NOT NULL DEFAULT 'Outlet Utama',
     active_template TEXT NOT NULL DEFAULT 'retail' CHECK (active_template IN ('fnb', 'service', 'retail', 'kelontong_bangunan')),
@@ -27,24 +40,29 @@ CREATE TABLE IF NOT EXISTS settings (
     pb1_rate REAL NOT NULL DEFAULT 10,
     currency_code TEXT NOT NULL DEFAULT 'IDR',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (business_id) REFERENCES businesses(id)
 );
 
 CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    sku TEXT NOT NULL UNIQUE,
+    business_id INTEGER NOT NULL,
+    sku TEXT NOT NULL,
     name TEXT NOT NULL,
     unit TEXT NOT NULL,
     price_cents INTEGER NOT NULL CHECK (price_cents >= 0),
     stock_qty REAL NOT NULL CHECK (stock_qty >= 0),
     is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(business_id, sku),
+    FOREIGN KEY (business_id) REFERENCES businesses(id)
 );
 
 CREATE TABLE IF NOT EXISTS orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    order_number TEXT NOT NULL UNIQUE,
+    business_id INTEGER NOT NULL,
+    order_number TEXT NOT NULL,
     status TEXT NOT NULL CHECK (status IN ('draft', 'checked_out', 'cancelled')),
     subtotal_cents INTEGER NOT NULL,
     discount_type TEXT NOT NULL CHECK (discount_type IN ('none', 'percent', 'fixed')),
@@ -58,6 +76,8 @@ CREATE TABLE IF NOT EXISTS orders (
     change_cents INTEGER NOT NULL DEFAULT 0,
     created_by INTEGER NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(business_id, order_number),
+    FOREIGN KEY (business_id) REFERENCES businesses(id),
     FOREIGN KEY (created_by) REFERENCES users(id)
 );
 
@@ -76,10 +96,12 @@ CREATE TABLE IF NOT EXISTS order_lines (
 
 CREATE TABLE IF NOT EXISTS audit_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_id INTEGER NOT NULL,
     user_id INTEGER,
     action TEXT NOT NULL,
     context_json TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (business_id) REFERENCES businesses(id),
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 

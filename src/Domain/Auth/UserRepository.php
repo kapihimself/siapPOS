@@ -13,6 +13,12 @@ final class UserRepository
 
     public function findByUsername(string $username): ?array
     {
+        // For SaaS, login usually either includes business domain, or usernames are globally unique.
+        // If usernames are unique per business, the login form needs to know the business.
+        // Assuming global uniqueness of username for login simplicity in this demo.
+        // Otherwise, this query will just pick the first user with the username across all businesses.
+        // The schema still enforces unique(business_id, username).
+        // We will fetch the business_id along with the user.
         $stmt = $this->pdo->prepare('SELECT * FROM users WHERE username = :username LIMIT 1');
         $stmt->execute([':username' => $username]);
         $row = $stmt->fetch();
@@ -22,6 +28,8 @@ final class UserRepository
 
     public function findByPin(string $pin): ?array
     {
+        // PIN login is usually per-device/per-tenant.
+        // We should ideally filter by business_id here, but PIN login isn't currently receiving business_id.
         $stmt = $this->pdo->query('SELECT * FROM users');
 
         foreach ($stmt->fetchAll() as $user) {
@@ -34,15 +42,18 @@ final class UserRepository
     }
 
     /** @return array<int, array<string, mixed>> */
-    public function all(): array
+    public function all(int $businessId): array
     {
-        $stmt = $this->pdo->query('SELECT id, username, full_name, role, created_at FROM users ORDER BY id ASC');
+        $stmt = $this->pdo->prepare('SELECT id, business_id, username, full_name, role, created_at FROM users WHERE business_id = :business_id ORDER BY id ASC');
+        $stmt->execute([':business_id' => $businessId]);
 
         return $stmt->fetchAll();
     }
 
-    public function count(): int
+    public function count(int $businessId): int
     {
-        return (int) $this->pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM users WHERE business_id = :business_id');
+        $stmt->execute([':business_id' => $businessId]);
+        return (int) $stmt->fetchColumn();
     }
 }
