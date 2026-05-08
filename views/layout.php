@@ -30,6 +30,9 @@ $user = Auth::user();
             <?php if (is_array($user)): ?>
                 <span class="badge"><?= htmlspecialchars((string) $user['full_name']) ?> (<?= htmlspecialchars((string) $user['role']) ?>)</span>
                 <a href="/?page=dashboard">Dashboard</a>
+                <a href="/?page=contacts">Kontak</a>
+                <a href="/?page=products">Produk</a>
+                <a href="/?page=taxonomy">Taksonomi</a>
                 <?php if (in_array((string) $user['role'], ['admin', 'manager'], true)): ?>
                     <a href="/?page=onboarding">Setup Bisnis</a>
                 <?php endif; ?>

@@ -17,32 +17,28 @@ final class ProductRepository
     {
         if ($search !== null && $search !== '') {
             $stmt = $this->pdo->prepare(
-                'SELECT * FROM products WHERE business_id = :business_id AND (name LIKE :search OR sku LIKE :search) ORDER BY id DESC'
+                'SELECT p.*, v.sku, v.sell_price_inc_tax_cents, c.name as category_name, b.name as brand_name, u.name as unit_name
+                 FROM products p
+                 LEFT JOIN variations v ON p.id = v.product_id
+                 LEFT JOIN categories c ON p.category_id = c.id
+                 LEFT JOIN brands b ON p.brand_id = b.id
+                 LEFT JOIN units u ON p.unit_id = u.id
+                 WHERE p.business_id = :business_id AND (p.name LIKE :search OR v.sku LIKE :search) ORDER BY p.id DESC'
             );
             $stmt->execute([':business_id' => $businessId, ':search' => '%' . $search . '%']);
 
             return $stmt->fetchAll();
         }
 
-        $stmt = $this->pdo->prepare('SELECT * FROM products WHERE business_id = :business_id ORDER BY id DESC');
-        $stmt->execute([':business_id' => $businessId]);
-
-        return $stmt->fetchAll();
-    }
-
-    /** @return array<int, array<string, mixed>> */
-    public function activeForPos(int $businessId, ?string $search = null): array
-    {
-        if ($search !== null && $search !== '') {
-            $stmt = $this->pdo->prepare(
-                'SELECT * FROM products WHERE business_id = :business_id AND is_active = 1 AND (name LIKE :search OR sku LIKE :search) ORDER BY name ASC'
-            );
-            $stmt->execute([':business_id' => $businessId, ':search' => '%' . $search . '%']);
-
-            return $stmt->fetchAll();
-        }
-
-        $stmt = $this->pdo->prepare('SELECT * FROM products WHERE business_id = :business_id AND is_active = 1 ORDER BY name ASC');
+        $stmt = $this->pdo->prepare('
+            SELECT p.*, v.sku, v.sell_price_inc_tax_cents, c.name as category_name, b.name as brand_name, u.name as unit_name
+            FROM products p
+            LEFT JOIN variations v ON p.id = v.product_id
+            LEFT JOIN categories c ON p.category_id = c.id
+            LEFT JOIN brands b ON p.brand_id = b.id
+            LEFT JOIN units u ON p.unit_id = u.id
+            WHERE p.business_id = :business_id ORDER BY p.id DESC
+        ');
         $stmt->execute([':business_id' => $businessId]);
 
         return $stmt->fetchAll();
@@ -58,100 +54,10 @@ final class ProductRepository
         return is_array($row) ? $row : null;
     }
 
-    /** @param array<int, int> $ids @return array<int, array<string, mixed>> */
-    public function findManyByIds(int $businessId, array $ids): array
-    {
-        if ($ids === []) {
-            return [];
-        }
-
-        $placeholders = implode(',', array_fill(0, count($ids), '?'));
-        $stmt = $this->pdo->prepare("SELECT * FROM products WHERE business_id = ? AND id IN ($placeholders)");
-        $stmt->execute(array_merge([$businessId], array_values($ids)));
-
-        $rows = $stmt->fetchAll();
-        $mapped = [];
-
-        foreach ($rows as $row) {
-            $mapped[(int) $row['id']] = $row;
-        }
-
-        return $mapped;
-    }
-
-    public function create(int $businessId, ProductData $data): void
-    {
-        $stmt = $this->pdo->prepare(
-            'INSERT INTO products (business_id, sku, name, unit, price_cents, stock_qty, is_active, created_at, updated_at)
-             VALUES (:business_id, :sku, :name, :unit, :price_cents, :stock_qty, :is_active, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)'
-        );
-
-        $stmt->execute([
-            ':business_id' => $businessId,
-            ':sku' => $data->sku,
-            ':name' => $data->name,
-            ':unit' => $data->unit,
-            ':price_cents' => $data->priceCents,
-            ':stock_qty' => $data->stockQty,
-            ':is_active' => $data->isActive ? 1 : 0,
-        ]);
-    }
-
-    public function update(int $businessId, int $id, ProductData $data): void
-    {
-        $stmt = $this->pdo->prepare(
-            'UPDATE products
-             SET sku = :sku,
-                 name = :name,
-                 unit = :unit,
-                 price_cents = :price_cents,
-                 stock_qty = :stock_qty,
-                 is_active = :is_active,
-                 updated_at = CURRENT_TIMESTAMP
-             WHERE business_id = :business_id AND id = :id'
-        );
-
-        $stmt->execute([
-            ':business_id' => $businessId,
-            ':id' => $id,
-            ':sku' => $data->sku,
-            ':name' => $data->name,
-            ':unit' => $data->unit,
-            ':price_cents' => $data->priceCents,
-            ':stock_qty' => $data->stockQty,
-            ':is_active' => $data->isActive ? 1 : 0,
-        ]);
-    }
-
     public function delete(int $businessId, int $id): void
     {
         $stmt = $this->pdo->prepare('DELETE FROM products WHERE business_id = :business_id AND id = :id');
         $stmt->execute([':business_id' => $businessId, ':id' => $id]);
-    }
-
-    public function decrementStock(int $businessId, int $id, float $quantity): void
-    {
-        $product = $this->find($businessId, $id);
-
-        if (!is_array($product)) {
-            throw new RuntimeException('Produk tidak ditemukan saat update stok.');
-        }
-
-        $currentStock = (float) $product['stock_qty'];
-
-        if ($currentStock < $quantity) {
-            throw new RuntimeException('Stok produk tidak mencukupi untuk transaksi.');
-        }
-
-        $stmt = $this->pdo->prepare(
-            'UPDATE products SET stock_qty = :new_stock, updated_at = CURRENT_TIMESTAMP WHERE business_id = :business_id AND id = :id'
-        );
-
-        $stmt->execute([
-            ':business_id' => $businessId,
-            ':id' => $id,
-            ':new_stock' => round($currentStock - $quantity, 3),
-        ]);
     }
 
     public function count(int $businessId): int

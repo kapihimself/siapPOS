@@ -13,6 +13,10 @@ use Siappos\Domain\Settings\Actions\CompleteOnboardingAction;
 use Siappos\Domain\Settings\BusinessTemplate;
 use Siappos\Domain\Settings\DTO\OnboardingData;
 use Siappos\Domain\Settings\SettingsRepository;
+use Siappos\Domain\Contact\ContactRepository;
+use Siappos\Domain\Taxonomy\CategoryRepository;
+use Siappos\Domain\Taxonomy\BrandRepository;
+use Siappos\Domain\Taxonomy\UnitRepository;
 use Siappos\Shared\Csrf;
 use Siappos\Shared\Flash;
 
@@ -26,6 +30,10 @@ require_once dirname(__DIR__) . '/src/bootstrap.php';
 $userRepository = new UserRepository($pdo);
 $productRepository = new ProductRepository($pdo);
 $settingsRepository = new SettingsRepository($pdo);
+$contactRepository = new ContactRepository($pdo);
+$categoryRepository = new CategoryRepository($pdo);
+$brandRepository = new BrandRepository($pdo);
+$unitRepository = new UnitRepository($pdo);
 $authAction = new AuthenticateAction($userRepository);
 $registerTenantAction = new RegisterTenantAction($pdo);
 $completeOnboardingAction = new CompleteOnboardingAction($settingsRepository);
@@ -227,6 +235,35 @@ if ($page === 'onboarding' && $method === 'POST') {
         Flash::error($throwable->getMessage());
         Response::redirect('/?page=onboarding');
     }
+}
+
+if ($page === 'contacts' && $method === 'GET') {
+    $requireAuth();
+    View::render('contacts', [
+        'title' => 'Manajemen Kontak',
+        'contacts' => $contactRepository->all(Auth::businessId()),
+    ]);
+    exit;
+}
+
+if ($page === 'taxonomy' && $method === 'GET') {
+    $requireAuth();
+    View::render('taxonomy', [
+        'title' => 'Taksonomi Produk',
+        'categories' => $categoryRepository->all(Auth::businessId()),
+        'brands' => $brandRepository->all(Auth::businessId()),
+        'units' => $unitRepository->all(Auth::businessId()),
+    ]);
+    exit;
+}
+
+if ($page === 'products' && $method === 'GET') {
+    $requireAuth();
+    View::render('products', [
+        'title' => 'Katalog Produk',
+        'products' => $productRepository->all(Auth::businessId()),
+    ]);
+    exit;
 }
 
 if ($page === 'dashboard' && $method === 'GET') {
