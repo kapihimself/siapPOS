@@ -5,6 +5,7 @@ use Siappos\App\Auth;
 use Siappos\App\Response;
 use Siappos\App\View;
 use Siappos\Domain\Auth\Actions\AuthenticateAction;
+use Siappos\Domain\Auth\Actions\RegisterTenantAction;
 use Siappos\Domain\Auth\LoginData;
 use Siappos\Domain\Auth\UserRepository;
 use Siappos\Domain\Product\ProductRepository;
@@ -12,6 +13,13 @@ use Siappos\Domain\Settings\Actions\CompleteOnboardingAction;
 use Siappos\Domain\Settings\BusinessTemplate;
 use Siappos\Domain\Settings\DTO\OnboardingData;
 use Siappos\Domain\Settings\SettingsRepository;
+use Siappos\Domain\Contact\ContactRepository;
+use Siappos\Domain\Taxonomy\CategoryRepository;
+use Siappos\Domain\Taxonomy\BrandRepository;
+use Siappos\Domain\Taxonomy\UnitRepository;
+use Siappos\Domain\Product\VariationRepository;
+use Siappos\Domain\Transaction\TransactionRepository;
+use Siappos\Domain\Transaction\Actions\ProcessSaleAction;
 use Siappos\Shared\Csrf;
 use Siappos\Shared\Flash;
 
@@ -25,7 +33,15 @@ require_once dirname(__DIR__) . '/src/bootstrap.php';
 $userRepository = new UserRepository($pdo);
 $productRepository = new ProductRepository($pdo);
 $settingsRepository = new SettingsRepository($pdo);
+$contactRepository = new ContactRepository($pdo);
+$categoryRepository = new CategoryRepository($pdo);
+$brandRepository = new BrandRepository($pdo);
+$unitRepository = new UnitRepository($pdo);
+$transactionRepository = new TransactionRepository($pdo);
+$variationRepository = new VariationRepository($pdo);
 $authAction = new AuthenticateAction($userRepository);
+$processSaleAction = new ProcessSaleAction($pdo, $variationRepository);
+$registerTenantAction = new RegisterTenantAction($pdo);
 $completeOnboardingAction = new CompleteOnboardingAction($settingsRepository);
 
 $page = (string) ($_GET['page'] ?? 'home');
@@ -50,14 +66,14 @@ $redirectDefault = static function () use ($settingsRepository): never {
         Response::redirect('/?page=login');
     }
 
-    if (!$settingsRepository->isOnboardingCompleted()) {
+    if (!$settingsRepository->isOnboardingCompleted(Auth::businessId())) {
         Response::redirect('/?page=onboarding');
     }
 
     Response::redirect('/?page=dashboard');
 };
 
-$template = $settingsRepository->activeTemplate();
+$template = Auth::check() ? $settingsRepository->activeTemplate(Auth::businessId()) : null;
 
 if ($page === 'home') {
     $redirectDefault();
@@ -73,6 +89,49 @@ if ($page === 'login' && $method === 'GET') {
         'defaultUsername' => (string) ($_SESSION['_login_username'] ?? ''),
     ]);
     exit;
+}
+
+if ($page === 'pos' && $method === 'GET') {
+    $requireAuth();
+    View::render('pos', [
+        'title' => 'POS Terminal',
+        'csrfToken' => Csrf::token(),
+    ]);
+    exit;
+}
+
+if ($page === 'register' && $method === 'GET') {
+    if (Auth::check()) {
+        $redirectDefault();
+    }
+
+    View::render('register', [
+        'title' => 'Daftar Bisnis Baru',
+    ]);
+    exit;
+}
+
+if ($page === 'register' && $method === 'POST') {
+    $requireCsrf('register');
+
+    try {
+        $businessName = trim((string) ($_POST['business_name'] ?? ''));
+        $username = strtolower(trim((string) ($_POST['username'] ?? '')));
+        $fullName = trim((string) ($_POST['full_name'] ?? ''));
+        $pin = trim((string) ($_POST['pin'] ?? ''));
+
+        if ($businessName === '' || $username === '' || $fullName === '' || $pin === '') {
+            throw new \RuntimeException('Semua kolom wajib diisi.');
+        }
+
+        $registerTenantAction->execute($businessName, $username, $fullName, $pin);
+
+        Flash::success('Pendaftaran berhasil. Silakan login menggunakan username dan PIN Anda.');
+        Response::redirect('/?page=login');
+    } catch (Throwable $throwable) {
+        Flash::error($throwable->getMessage());
+        Response::redirect('/?page=register');
+    }
 }
 
 if ($page === 'login' && $method === 'POST') {
@@ -111,13 +170,15 @@ if ($page === 'try-demo' && $method === 'POST') {
 
     Auth::login([
         'id' => (int) $user['id'],
+        'business_id' => (int) $user['business_id'],
         'username' => (string) $user['username'],
         'full_name' => (string) $user['full_name'],
         'role' => (string) $user['role'],
     ]);
 
-    if (!$settingsRepository->isOnboardingCompleted()) {
+    if (!$settingsRepository->isOnboardingCompleted(Auth::businessId())) {
         $completeOnboardingAction->execute(
+            Auth::businessId(),
             new OnboardingData(
                 businessName: 'SiapPOS Demo Store',
                 outletName: 'Outlet Demo',
@@ -138,9 +199,12 @@ if ($page === 'onboarding' && $method === 'GET') {
         Response::redirect('/?page=dashboard');
     }
 
-    $settings = $settingsRepository->get();
-    $productCount = $productRepository->count();
-    $orderCount = (int) $pdo->query("SELECT COUNT(*) FROM orders WHERE status = 'checked_out'")->fetchColumn();
+    $settings = $settingsRepository->get(Auth::businessId());
+    $productCount = $productRepository->count(Auth::businessId());
+
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM transactions WHERE business_id = :business_id AND type = 'sell' AND status = 'final'");
+    $stmt->execute([':business_id' => Auth::businessId()]);
+    $orderCount = (int) $stmt->fetchColumn();
 
     $checklist = [
         ['label' => 'Isi identitas bisnis dan outlet', 'done' => ((string) ($settings['business_name'] ?? '')) !== '' && ((string) ($settings['outlet_name'] ?? '')) !== ''],
@@ -179,7 +243,7 @@ if ($page === 'onboarding' && $method === 'POST') {
 
     try {
         $data = OnboardingData::fromRequest($_POST);
-        $completeOnboardingAction->execute($data);
+        $completeOnboardingAction->execute(Auth::businessId(), $data);
         Flash::success('Setup bisnis tersimpan. Anda siap lanjut ke dashboard.');
         Response::redirect('/?page=dashboard');
     } catch (Throwable $throwable) {
@@ -188,22 +252,114 @@ if ($page === 'onboarding' && $method === 'POST') {
     }
 }
 
+if ($page === 'contacts' && $method === 'GET') {
+    $requireAuth();
+    View::render('contacts', [
+        'title' => 'Manajemen Kontak',
+        'contacts' => $contactRepository->all(Auth::businessId()),
+    ]);
+    exit;
+}
+
+if ($page === 'taxonomy' && $method === 'GET') {
+    $requireAuth();
+    View::render('taxonomy', [
+        'title' => 'Taksonomi Produk',
+        'categories' => $categoryRepository->all(Auth::businessId()),
+        'brands' => $brandRepository->all(Auth::businessId()),
+        'units' => $unitRepository->all(Auth::businessId()),
+    ]);
+    exit;
+}
+
+if ($page === 'products' && $method === 'GET') {
+    $requireAuth();
+    View::render('products', [
+        'title' => 'Katalog Produk',
+        'products' => $productRepository->all(Auth::businessId()),
+    ]);
+    exit;
+}
+
+if ($page === 'purchases' && $method === 'GET') {
+    $requireAuth();
+    View::render('purchases', [
+        'title' => 'Daftar Pembelian',
+        'purchases' => $transactionRepository->allPurchases(Auth::businessId()),
+    ]);
+    exit;
+}
+
+if ($page === 'stock-adjustments' && $method === 'GET') {
+    $requireAuth();
+    View::render('stock_adjustments', [
+        'title' => 'Penyesuaian Stok',
+        'adjustments' => $transactionRepository->allStockAdjustments(Auth::businessId()),
+    ]);
+    exit;
+}
+
+if ($page === 'api-products' && $method === 'GET') {
+    $requireAuth();
+    header('Content-Type: application/json');
+    $search = $_GET['q'] ?? null;
+    $products = $variationRepository->activeForPos(Auth::businessId(), $search);
+    echo json_encode(['data' => $products]);
+    exit;
+}
+
+if ($page === 'api-checkout' && $method === 'POST') {
+    $requireAuth();
+    header('Content-Type: application/json');
+
+    // Minimal CSRF for AJAX (expected in headers typically, but we'll accept in JSON payload for simplicity in this demo)
+    $payload = json_decode(file_get_contents('php://input'), true);
+
+    if (!is_array($payload)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'Invalid JSON payload.']);
+        exit;
+    }
+
+    if (!Csrf::verify($payload['_csrf'] ?? null)) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'Sesi kedaluwarsa. Silakan muat ulang halaman.']);
+        exit;
+    }
+
+    try {
+        // Hardcode outlet_id to 1 for this iteration as multi-outlet is out of scope
+        $outletId = 1;
+        $result = $processSaleAction->execute(Auth::businessId(), Auth::id(), $outletId, $payload);
+        echo json_encode($result);
+    } catch (\Throwable $e) {
+        http_response_code(422);
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    }
+    exit;
+}
+
 if ($page === 'dashboard' && $method === 'GET') {
     $requireAuth();
 
-    if (!$settingsRepository->isOnboardingCompleted()) {
+    if (!$settingsRepository->isOnboardingCompleted(Auth::businessId())) {
         Response::redirect('/?page=onboarding');
     }
 
-    $settings = $settingsRepository->get();
-    $template = $settingsRepository->activeTemplate();
+    $settings = $settingsRepository->get(Auth::businessId());
+    $template = $settingsRepository->activeTemplate(Auth::businessId());
 
-    $orderCount = (int) $pdo->query("SELECT COUNT(*) FROM orders WHERE status = 'checked_out'")->fetchColumn();
-    $totalRevenueCents = (int) $pdo->query("SELECT COALESCE(SUM(total_cents),0) FROM orders WHERE status = 'checked_out'")->fetchColumn();
+    $stmtOrders = $pdo->prepare("SELECT COUNT(*) FROM transactions WHERE business_id = :business_id AND type = 'sell' AND status = 'final'");
+    $stmtOrders->execute([':business_id' => Auth::businessId()]);
+    $orderCount = (int) $stmtOrders->fetchColumn();
+
+    $stmtRevenue = $pdo->prepare("SELECT COALESCE(SUM(final_total_cents),0) FROM transactions WHERE business_id = :business_id AND type = 'sell' AND status = 'final'");
+    $stmtRevenue->execute([':business_id' => Auth::businessId()]);
+    $totalRevenueCents = (int) $stmtRevenue->fetchColumn();
 
     $setupChecklist = [
         ['label' => 'Onboarding bisnis selesai', 'done' => true],
-        ['label' => 'Katalog produk minimal 1 item', 'done' => $productRepository->count() > 0],
+        ['label' => 'Katalog produk minimal 1 item', 'done' => $productRepository->count(Auth::businessId()) > 0],
         ['label' => 'Transaksi pertama tercatat', 'done' => $orderCount > 0],
     ];
 
@@ -233,8 +389,8 @@ if ($page === 'dashboard' && $method === 'GET') {
         'setupProgressPercent' => $setupProgressPercent,
         'roleCopy' => $roleCopy,
         'kpi' => [
-            'users' => $userRepository->count(),
-            'products' => $productRepository->count(),
+            'users' => $userRepository->count(Auth::businessId()),
+            'products' => $productRepository->count(Auth::businessId()),
             'orders' => $orderCount,
             'revenue_cents' => $totalRevenueCents,
         ],

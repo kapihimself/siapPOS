@@ -73,16 +73,6 @@ final class Database
             'ALTER TABLE settings ADD COLUMN onboarding_completed INTEGER NOT NULL DEFAULT 0'
         );
 
-        $pdo->exec(
-            'CREATE TABLE IF NOT EXISTS outlets (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                address TEXT,
-                phone TEXT,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )'
-        );
     }
 
     private static function ensureColumn(PDO $pdo, string $table, string $column, string $ddl): void
