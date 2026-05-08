@@ -33,6 +33,8 @@ $user = Auth::user();
                 <a href="/?page=contacts">Kontak</a>
                 <a href="/?page=products">Produk</a>
                 <a href="/?page=taxonomy">Taksonomi</a>
+                <a href="/?page=purchases">Pembelian</a>
+                <a href="/?page=stock-adjustments">Penyesuaian Stok</a>
                 <?php if (in_array((string) $user['role'], ['admin', 'manager'], true)): ?>
                     <a href="/?page=onboarding">Setup Bisnis</a>
                 <?php endif; ?>

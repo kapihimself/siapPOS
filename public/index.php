@@ -17,6 +17,7 @@ use Siappos\Domain\Contact\ContactRepository;
 use Siappos\Domain\Taxonomy\CategoryRepository;
 use Siappos\Domain\Taxonomy\BrandRepository;
 use Siappos\Domain\Taxonomy\UnitRepository;
+use Siappos\Domain\Transaction\TransactionRepository;
 use Siappos\Shared\Csrf;
 use Siappos\Shared\Flash;
 
@@ -34,6 +35,7 @@ $contactRepository = new ContactRepository($pdo);
 $categoryRepository = new CategoryRepository($pdo);
 $brandRepository = new BrandRepository($pdo);
 $unitRepository = new UnitRepository($pdo);
+$transactionRepository = new TransactionRepository($pdo);
 $authAction = new AuthenticateAction($userRepository);
 $registerTenantAction = new RegisterTenantAction($pdo);
 $completeOnboardingAction = new CompleteOnboardingAction($settingsRepository);
@@ -187,7 +189,7 @@ if ($page === 'onboarding' && $method === 'GET') {
     $settings = $settingsRepository->get(Auth::businessId());
     $productCount = $productRepository->count(Auth::businessId());
 
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM orders WHERE business_id = :business_id AND status = 'checked_out'");
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM transactions WHERE business_id = :business_id AND type = 'sell' AND status = 'final'");
     $stmt->execute([':business_id' => Auth::businessId()]);
     $orderCount = (int) $stmt->fetchColumn();
 
@@ -266,6 +268,24 @@ if ($page === 'products' && $method === 'GET') {
     exit;
 }
 
+if ($page === 'purchases' && $method === 'GET') {
+    $requireAuth();
+    View::render('purchases', [
+        'title' => 'Daftar Pembelian',
+        'purchases' => $transactionRepository->allPurchases(Auth::businessId()),
+    ]);
+    exit;
+}
+
+if ($page === 'stock-adjustments' && $method === 'GET') {
+    $requireAuth();
+    View::render('stock_adjustments', [
+        'title' => 'Penyesuaian Stok',
+        'adjustments' => $transactionRepository->allStockAdjustments(Auth::businessId()),
+    ]);
+    exit;
+}
+
 if ($page === 'dashboard' && $method === 'GET') {
     $requireAuth();
 
@@ -276,11 +296,11 @@ if ($page === 'dashboard' && $method === 'GET') {
     $settings = $settingsRepository->get(Auth::businessId());
     $template = $settingsRepository->activeTemplate(Auth::businessId());
 
-    $stmtOrders = $pdo->prepare("SELECT COUNT(*) FROM orders WHERE business_id = :business_id AND status = 'checked_out'");
+    $stmtOrders = $pdo->prepare("SELECT COUNT(*) FROM transactions WHERE business_id = :business_id AND type = 'sell' AND status = 'final'");
     $stmtOrders->execute([':business_id' => Auth::businessId()]);
     $orderCount = (int) $stmtOrders->fetchColumn();
 
-    $stmtRevenue = $pdo->prepare("SELECT COALESCE(SUM(total_cents),0) FROM orders WHERE business_id = :business_id AND status = 'checked_out'");
+    $stmtRevenue = $pdo->prepare("SELECT COALESCE(SUM(final_total_cents),0) FROM transactions WHERE business_id = :business_id AND type = 'sell' AND status = 'final'");
     $stmtRevenue->execute([':business_id' => Auth::businessId()]);
     $totalRevenueCents = (int) $stmtRevenue->fetchColumn();
 

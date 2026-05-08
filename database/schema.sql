@@ -140,41 +140,50 @@ CREATE TABLE IF NOT EXISTS variation_location_details (
     FOREIGN KEY (outlet_id) REFERENCES outlets(id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS orders (
+CREATE TABLE IF NOT EXISTS transactions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     business_id INTEGER NOT NULL,
-    order_number TEXT NOT NULL,
-    status TEXT NOT NULL CHECK (status IN ('draft', 'checked_out', 'cancelled')),
-    subtotal_cents INTEGER NOT NULL,
-    discount_type TEXT NOT NULL CHECK (discount_type IN ('none', 'percent', 'fixed')),
-    discount_value REAL NOT NULL DEFAULT 0,
-    discount_cents INTEGER NOT NULL DEFAULT 0,
-    tax_rate REAL NOT NULL DEFAULT 10,
-    tax_cents INTEGER NOT NULL DEFAULT 0,
-    total_cents INTEGER NOT NULL,
-    payment_method TEXT NOT NULL CHECK (payment_method IN ('cash', 'qris')),
-    cash_received_cents INTEGER,
-    change_cents INTEGER NOT NULL DEFAULT 0,
+    type TEXT NOT NULL CHECK (type IN ('sell', 'purchase', 'stock_adjustment', 'opening_stock')),
+    status TEXT NOT NULL CHECK (status IN ('final', 'draft', 'cancelled', 'received', 'pending')),
+    invoice_no TEXT NOT NULL,
     contact_id INTEGER,
+    total_before_tax_cents INTEGER NOT NULL DEFAULT 0,
+    tax_cents INTEGER NOT NULL DEFAULT 0,
+    discount_cents INTEGER NOT NULL DEFAULT 0,
+    final_total_cents INTEGER NOT NULL DEFAULT 0,
+    payment_status TEXT NOT NULL DEFAULT 'paid' CHECK (payment_status IN ('paid', 'due', 'partial')),
     created_by INTEGER NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(business_id, order_number),
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(business_id, invoice_no),
     FOREIGN KEY (business_id) REFERENCES businesses(id),
     FOREIGN KEY (contact_id) REFERENCES contacts(id),
     FOREIGN KEY (created_by) REFERENCES users(id)
 );
 
-CREATE TABLE IF NOT EXISTS order_lines (
+CREATE TABLE IF NOT EXISTS transaction_lines (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    order_id INTEGER NOT NULL,
+    transaction_id INTEGER NOT NULL,
     variation_id INTEGER NOT NULL,
-    product_name TEXT NOT NULL,
-    qty REAL NOT NULL CHECK (qty > 0),
-    unit_price_cents INTEGER NOT NULL CHECK (unit_price_cents >= 0),
-    line_total_cents INTEGER NOT NULL CHECK (line_total_cents >= 0),
+    quantity REAL NOT NULL CHECK (quantity > 0),
+    unit_price_before_discount_cents INTEGER NOT NULL DEFAULT 0,
+    unit_price_inc_tax_cents INTEGER NOT NULL DEFAULT 0,
+    line_discount_cents INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE,
     FOREIGN KEY (variation_id) REFERENCES variations(id)
+);
+
+CREATE TABLE IF NOT EXISTS transaction_sell_lines_purchase_lines (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sell_line_id INTEGER NOT NULL,
+    purchase_line_id INTEGER NOT NULL,
+    quantity REAL NOT NULL CHECK (quantity > 0),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (sell_line_id) REFERENCES transaction_lines(id) ON DELETE CASCADE,
+    FOREIGN KEY (purchase_line_id) REFERENCES transaction_lines(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS audit_logs (
@@ -188,9 +197,9 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
-CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
-CREATE INDEX IF NOT EXISTS idx_order_lines_order_id ON order_lines(order_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_at);
+CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(type);
+CREATE INDEX IF NOT EXISTS idx_transaction_lines_transaction_id ON transaction_lines(transaction_id);
 CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);
 CREATE INDEX IF NOT EXISTS idx_variations_sku ON variations(sku);
 CREATE INDEX IF NOT EXISTS idx_contacts_name ON contacts(name);
