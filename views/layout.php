@@ -21,28 +21,38 @@ $user = Auth::user();
 </head>
 <body>
 <div class="container">
-    <header class="header">
-        <div>
-            <div class="brand">SIAPPOS</div>
-            <div class="muted">Kasir modern yang cepat dipakai, rapi datanya, dan siap tumbuh.</div>
-        </div>
-        <nav class="nav" aria-label="Navigasi utama">
+    <header class="header" style="flex-direction: column; align-items: stretch; gap: 15px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <div class="brand">SIAPPOS</div>
+                <div class="muted">Kasir modern yang cepat dipakai, rapi datanya, dan siap tumbuh.</div>
+            </div>
             <?php if (is_array($user)): ?>
-                <span class="badge"><?= htmlspecialchars((string) $user['full_name']) ?> (<?= htmlspecialchars((string) $user['role']) ?>)</span>
-                <a href="/?page=dashboard">Dashboard</a>
-                <a href="/?page=contacts">Kontak</a>
-                <a href="/?page=products">Produk</a>
-                <a href="/?page=taxonomy">Taksonomi</a>
-                <a href="/?page=purchases">Pembelian</a>
-                <a href="/?page=stock-adjustments">Penyesuaian Stok</a>
-                <?php if (in_array((string) $user['role'], ['admin', 'manager'], true)): ?>
-                    <a href="/?page=onboarding">Setup Bisnis</a>
-                <?php endif; ?>
-                <a href="/?page=logout" class="btn btn-danger">Logout</a>
+                <div style="text-align: right;">
+                    <span class="badge" style="margin-bottom: 5px;"><?= htmlspecialchars((string) $user['full_name']) ?> (<?= htmlspecialchars((string) $user['role']) ?>)</span>
+                    <br>
+                    <a href="/?page=logout" class="btn btn-danger" style="display: inline-block; padding: 4px 8px; font-size: 12px; color: #fff;">Logout</a>
+                </div>
             <?php else: ?>
-                <a href="/?page=login" class="btn btn-primary">Masuk</a>
+                <div>
+                    <a href="/?page=login" class="btn btn-primary">Masuk</a>
+                </div>
             <?php endif; ?>
-        </nav>
+        </div>
+
+        <?php if (is_array($user)): ?>
+            <nav class="nav" aria-label="Navigasi utama" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px;">
+                <a href="/?page=dashboard" style="text-align: center;">Dashboard</a>
+                <a href="/?page=contacts" style="text-align: center;">Kontak</a>
+                <a href="/?page=products" style="text-align: center;">Produk</a>
+                <a href="/?page=taxonomy" style="text-align: center;">Taksonomi</a>
+                <a href="/?page=purchases" style="text-align: center;">Pembelian</a>
+                <a href="/?page=stock-adjustments" style="text-align: center;">Penyesuaian Stok</a>
+                <?php if (in_array((string) $user['role'], ['admin', 'manager'], true)): ?>
+                    <a href="/?page=onboarding" style="text-align: center;">Setup Bisnis</a>
+                <?php endif; ?>
+            </nav>
+        <?php endif; ?>
     </header>
 
     <?php if ($flashSuccess !== null): ?>
