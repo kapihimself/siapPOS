@@ -43,6 +43,7 @@ $user = Auth::user();
         <?php if (is_array($user)): ?>
             <nav class="nav" aria-label="Navigasi utama" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px;">
                 <a href="/?page=dashboard" style="text-align: center;">Dashboard</a>
+                <a href="/?page=pos" style="text-align: center; background: var(--yellow);">POS Terminal</a>
                 <a href="/?page=contacts" style="text-align: center;">Kontak</a>
                 <a href="/?page=products" style="text-align: center;">Produk</a>
                 <a href="/?page=taxonomy" style="text-align: center;">Taksonomi</a>

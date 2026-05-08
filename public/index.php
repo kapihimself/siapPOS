@@ -17,7 +17,9 @@ use Siappos\Domain\Contact\ContactRepository;
 use Siappos\Domain\Taxonomy\CategoryRepository;
 use Siappos\Domain\Taxonomy\BrandRepository;
 use Siappos\Domain\Taxonomy\UnitRepository;
+use Siappos\Domain\Product\VariationRepository;
 use Siappos\Domain\Transaction\TransactionRepository;
+use Siappos\Domain\Transaction\Actions\ProcessSaleAction;
 use Siappos\Shared\Csrf;
 use Siappos\Shared\Flash;
 
@@ -36,7 +38,9 @@ $categoryRepository = new CategoryRepository($pdo);
 $brandRepository = new BrandRepository($pdo);
 $unitRepository = new UnitRepository($pdo);
 $transactionRepository = new TransactionRepository($pdo);
+$variationRepository = new VariationRepository($pdo);
 $authAction = new AuthenticateAction($userRepository);
+$processSaleAction = new ProcessSaleAction($pdo, $variationRepository);
 $registerTenantAction = new RegisterTenantAction($pdo);
 $completeOnboardingAction = new CompleteOnboardingAction($settingsRepository);
 
@@ -83,6 +87,15 @@ if ($page === 'login' && $method === 'GET') {
     View::render('login', [
         'title' => 'Masuk',
         'defaultUsername' => (string) ($_SESSION['_login_username'] ?? ''),
+    ]);
+    exit;
+}
+
+if ($page === 'pos' && $method === 'GET') {
+    $requireAuth();
+    View::render('pos', [
+        'title' => 'POS Terminal',
+        'csrfToken' => Csrf::token(),
     ]);
     exit;
 }
@@ -283,6 +296,46 @@ if ($page === 'stock-adjustments' && $method === 'GET') {
         'title' => 'Penyesuaian Stok',
         'adjustments' => $transactionRepository->allStockAdjustments(Auth::businessId()),
     ]);
+    exit;
+}
+
+if ($page === 'api-products' && $method === 'GET') {
+    $requireAuth();
+    header('Content-Type: application/json');
+    $search = $_GET['q'] ?? null;
+    $products = $variationRepository->activeForPos(Auth::businessId(), $search);
+    echo json_encode(['data' => $products]);
+    exit;
+}
+
+if ($page === 'api-checkout' && $method === 'POST') {
+    $requireAuth();
+    header('Content-Type: application/json');
+
+    // Minimal CSRF for AJAX (expected in headers typically, but we'll accept in JSON payload for simplicity in this demo)
+    $payload = json_decode(file_get_contents('php://input'), true);
+
+    if (!is_array($payload)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'Invalid JSON payload.']);
+        exit;
+    }
+
+    if (!Csrf::verify($payload['_csrf'] ?? null)) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'Sesi kedaluwarsa. Silakan muat ulang halaman.']);
+        exit;
+    }
+
+    try {
+        // Hardcode outlet_id to 1 for this iteration as multi-outlet is out of scope
+        $outletId = 1;
+        $result = $processSaleAction->execute(Auth::businessId(), Auth::id(), $outletId, $payload);
+        echo json_encode($result);
+    } catch (\Throwable $e) {
+        http_response_code(422);
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    }
     exit;
 }
 
