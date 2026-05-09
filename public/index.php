@@ -13,8 +13,11 @@ use Siappos\Domain\Settings\BusinessTemplate;
 use Siappos\Domain\Settings\DTO\OnboardingData;
 use Siappos\Domain\Settings\SettingsRepository;
 use Siappos\Domain\Transaction\Actions\ProcessSaleAction;
+use Siappos\Domain\Transaction\Actions\CreatePurchaseAction;
 use Siappos\Domain\Transaction\DTO\CheckoutData;
 use Siappos\Domain\Transaction\DTO\CartItemData;
+use Siappos\Domain\Transaction\DTO\PurchaseData;
+use Siappos\Domain\Transaction\DTO\PurchaseLineData;
 use Siappos\Shared\Csrf;
 use Siappos\Shared\Flash;
 use Siappos\Shared\EventBus;
@@ -254,6 +257,74 @@ if ($page === 'api/checkout' && $method === 'POST') {
         echo json_encode(['error' => $e->getMessage()]);
     }
     exit;
+}
+
+if ($page === 'purchases' && $method === 'GET') {
+    $requireAuth();
+
+    if (!Auth::hasAnyRole('admin', 'manager')) {
+        Flash::error('Hanya Admin/Manager yang dapat mengakses daftar pembelian.');
+        Response::redirect('/?page=dashboard');
+    }
+
+    $businessId = Auth::businessId();
+    $stmt = $pdo->prepare("SELECT * FROM transactions WHERE business_id = :business_id AND type = 'purchase' ORDER BY created_at DESC");
+    $stmt->execute([':business_id' => $businessId]);
+    $purchases = $stmt->fetchAll();
+
+    View::render('purchases', [
+        'title' => 'Daftar Pembelian (Procurement)',
+        'purchases' => $purchases,
+    ]);
+    exit;
+}
+
+if ($page === 'purchases/create' && $method === 'GET') {
+    $requireAuth();
+
+    if (!Auth::hasAnyRole('admin', 'manager')) {
+        Flash::error('Hanya Admin/Manager yang dapat membuat transaksi pembelian.');
+        Response::redirect('/?page=dashboard');
+    }
+
+    View::render('purchase-form', [
+        'title' => 'Buat Pembelian Baru',
+    ]);
+    exit;
+}
+
+if ($page === 'purchases/store' && $method === 'POST') {
+    $requireAuth();
+    $requireCsrf('purchases/create');
+
+    if (!Auth::hasAnyRole('admin', 'manager')) {
+        Flash::error('Akses ditolak.');
+        Response::redirect('/?page=dashboard');
+    }
+
+    try {
+        $lines = [];
+        foreach ($_POST['lines'] ?? [] as $lineData) {
+            $lines[] = new PurchaseLineData(
+                productId: (int) ($lineData['product_id'] ?? 0),
+                productName: (string) ($lineData['product_name'] ?? ''),
+                qty: (float) ($lineData['qty'] ?? 0),
+                unitPriceCents: ((int) ($lineData['unit_price'] ?? 0)) * 100,
+                lineTotalCents: ((int) ($lineData['line_total'] ?? 0)) * 100
+            );
+        }
+
+        $data = PurchaseData::fromRequest($_POST, $lines, Auth::id(), Auth::businessId());
+
+        $createPurchase = new CreatePurchaseAction($pdo);
+        $transaction = $createPurchase->execute($data);
+
+        Flash::success('Pembelian ' . $transaction['transaction_number'] . ' berhasil disimpan dan stok telah diperbarui.');
+        Response::redirect('/?page=purchases');
+    } catch (Throwable $throwable) {
+        Flash::error($throwable->getMessage());
+        Response::redirect('/?page=purchases/create');
+    }
 }
 
 if ($page === 'dashboard' && $method === 'GET') {
