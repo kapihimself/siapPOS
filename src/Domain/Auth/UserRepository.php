@@ -20,9 +20,10 @@ final class UserRepository
         return is_array($row) ? $row : null;
     }
 
-    public function findByPin(string $pin): ?array
+    public function findByPin(string $pin, int $businessId): ?array
     {
-        $stmt = $this->pdo->query('SELECT * FROM users');
+        $stmt = $this->pdo->prepare('SELECT * FROM users WHERE business_id = :business_id');
+        $stmt->execute([':business_id' => $businessId]);
 
         foreach ($stmt->fetchAll() as $user) {
             if (password_verify($pin, (string) $user['pin_hash'])) {
@@ -34,15 +35,18 @@ final class UserRepository
     }
 
     /** @return array<int, array<string, mixed>> */
-    public function all(): array
+    public function all(int $businessId): array
     {
-        $stmt = $this->pdo->query('SELECT id, username, full_name, role, created_at FROM users ORDER BY id ASC');
+        $stmt = $this->pdo->prepare('SELECT id, username, full_name, role, created_at FROM users WHERE business_id = :business_id ORDER BY id ASC');
+        $stmt->execute([':business_id' => $businessId]);
 
         return $stmt->fetchAll();
     }
 
-    public function count(): int
+    public function count(int $businessId): int
     {
-        return (int) $this->pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM users WHERE business_id = :business_id');
+        $stmt->execute([':business_id' => $businessId]);
+        return (int) $stmt->fetchColumn();
     }
 }

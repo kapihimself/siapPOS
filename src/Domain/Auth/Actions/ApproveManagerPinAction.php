@@ -13,7 +13,7 @@ final class ApproveManagerPinAction
     }
 
     /** @return array<string, mixed> */
-    public function execute(string $pin): array
+    public function execute(string $pin, int $businessId): array
     {
         $cleanPin = trim($pin);
 
@@ -21,7 +21,7 @@ final class ApproveManagerPinAction
             throw new RuntimeException('PIN persetujuan tidak valid.');
         }
 
-        $user = $this->users->findByPin($cleanPin);
+        $user = $this->users->findByPin($cleanPin, $businessId);
 
         if (!is_array($user)) {
             throw new RuntimeException('PIN persetujuan tidak ditemukan.');

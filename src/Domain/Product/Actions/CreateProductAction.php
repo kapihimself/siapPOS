@@ -12,8 +12,8 @@ final class CreateProductAction
     {
     }
 
-    public function execute(ProductData $data): void
+    public function execute(ProductData $data, int $businessId): void
     {
-        $this->products->create($data);
+        $this->products->create($data, $businessId);
     }
 }

@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Siappos\Domain\Order\DTO;
+namespace Siappos\Domain\Transaction\DTO;
 
 use InvalidArgumentException;
 use Siappos\Shared\Money;
@@ -10,6 +10,7 @@ final class CheckoutData
 {
     /** @param list<CartItemData> $items */
     public function __construct(
+        public readonly int $businessId,
         public readonly array $items,
         public readonly string $discountType,
         public readonly float $discountValue,
@@ -17,6 +18,8 @@ final class CheckoutData
         public readonly string $paymentMethod,
         public readonly int $cashReceivedCents,
         public readonly int $actorUserId,
+        public readonly ?int $contactId = null,
+        public readonly string $type = 'sell',
     ) {
         if ($this->items === []) {
             throw new InvalidArgumentException('Keranjang masih kosong.');
@@ -40,7 +43,7 @@ final class CheckoutData
             throw new InvalidArgumentException('Tarif pajak tidak valid.');
         }
 
-        if (!in_array($this->paymentMethod, ['cash', 'qris'], true)) {
+        if (!in_array($this->paymentMethod, ['cash', 'qris', 'bank_transfer', 'custom'], true)) {
             throw new InvalidArgumentException('Metode pembayaran tidak valid.');
         }
 
@@ -50,17 +53,20 @@ final class CheckoutData
     }
 
     /** @param list<CartItemData> $items */
-    public static function fromRequest(array $payload, array $items, int $actorUserId, float $taxRate): self
+    public static function fromRequest(array $payload, array $items, int $actorUserId, float $taxRate, int $businessId): self
     {
         $discountType = (string) ($payload['discount_type'] ?? 'none');
         $discountRaw = (string) ($payload['discount_value'] ?? '0');
         $paymentMethod = (string) ($payload['payment_method'] ?? 'cash');
         $cashRaw = (string) ($payload['cash_received'] ?? '0');
+        $contactId = isset($payload['contact_id']) && is_numeric($payload['contact_id']) ? (int) $payload['contact_id'] : null;
+        $type = (string) ($payload['type'] ?? 'sell');
 
         $discountValue = self::normalizeDecimal($discountRaw);
         $cashReceivedCents = Money::toCents($cashRaw);
 
         return new self(
+            businessId: $businessId,
             items: $items,
             discountType: $discountType,
             discountValue: $discountValue,
@@ -68,6 +74,8 @@ final class CheckoutData
             paymentMethod: $paymentMethod,
             cashReceivedCents: $cashReceivedCents,
             actorUserId: $actorUserId,
+            contactId: $contactId,
+            type: $type,
         );
     }
 

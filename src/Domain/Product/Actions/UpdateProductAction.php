@@ -12,8 +12,8 @@ final class UpdateProductAction
     {
     }
 
-    public function execute(int $id, ProductData $data): void
+    public function execute(int $id, ProductData $data, int $businessId): void
     {
-        $this->products->update($id, $data);
+        $this->products->update($id, $data, $businessId);
     }
 }

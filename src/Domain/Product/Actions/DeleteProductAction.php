@@ -11,8 +11,8 @@ final class DeleteProductAction
     {
     }
 
-    public function execute(int $id): void
+    public function execute(int $id, int $businessId): void
     {
-        $this->products->delete($id);
+        $this->products->delete($id, $businessId);
     }
 }

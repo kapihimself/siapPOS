@@ -12,8 +12,12 @@ use Siappos\Domain\Settings\Actions\CompleteOnboardingAction;
 use Siappos\Domain\Settings\BusinessTemplate;
 use Siappos\Domain\Settings\DTO\OnboardingData;
 use Siappos\Domain\Settings\SettingsRepository;
+use Siappos\Domain\Transaction\Actions\ProcessSaleAction;
+use Siappos\Domain\Transaction\DTO\CheckoutData;
+use Siappos\Domain\Transaction\DTO\CartItemData;
 use Siappos\Shared\Csrf;
 use Siappos\Shared\Flash;
+use Siappos\Shared\EventBus;
 
 header('X-Frame-Options: DENY');
 header('X-Content-Type-Options: nosniff');
@@ -22,6 +26,7 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 session_start();
 require_once dirname(__DIR__) . '/src/bootstrap.php';
 
+$eventBus = new EventBus();
 $userRepository = new UserRepository($pdo);
 $productRepository = new ProductRepository($pdo);
 $settingsRepository = new SettingsRepository($pdo);
@@ -50,14 +55,12 @@ $redirectDefault = static function () use ($settingsRepository): never {
         Response::redirect('/?page=login');
     }
 
-    if (!$settingsRepository->isOnboardingCompleted()) {
+    if (!$settingsRepository->isOnboardingCompleted(Auth::businessId())) {
         Response::redirect('/?page=onboarding');
     }
 
     Response::redirect('/?page=dashboard');
 };
-
-$template = $settingsRepository->activeTemplate();
 
 if ($page === 'home') {
     $redirectDefault();
@@ -111,18 +114,20 @@ if ($page === 'try-demo' && $method === 'POST') {
 
     Auth::login([
         'id' => (int) $user['id'],
+        'business_id' => (int) $user['business_id'],
         'username' => (string) $user['username'],
         'full_name' => (string) $user['full_name'],
         'role' => (string) $user['role'],
     ]);
 
-    if (!$settingsRepository->isOnboardingCompleted()) {
+    if (!$settingsRepository->isOnboardingCompleted(Auth::businessId())) {
         $completeOnboardingAction->execute(
             new OnboardingData(
                 businessName: 'SiapPOS Demo Store',
                 outletName: 'Outlet Demo',
                 template: BusinessTemplate::Retail,
-            )
+            ),
+            Auth::businessId()
         );
     }
 
@@ -138,9 +143,10 @@ if ($page === 'onboarding' && $method === 'GET') {
         Response::redirect('/?page=dashboard');
     }
 
-    $settings = $settingsRepository->get();
-    $productCount = $productRepository->count();
-    $orderCount = (int) $pdo->query("SELECT COUNT(*) FROM orders WHERE status = 'checked_out'")->fetchColumn();
+    $settings = $settingsRepository->get(Auth::businessId());
+    $productCount = $productRepository->count(Auth::businessId());
+    $businessId = Auth::businessId();
+    $orderCount = (int) $pdo->query("SELECT COUNT(*) FROM transactions WHERE business_id = {$businessId} AND status = 'checked_out'")->fetchColumn();
 
     $checklist = [
         ['label' => 'Isi identitas bisnis dan outlet', 'done' => ((string) ($settings['business_name'] ?? '')) !== '' && ((string) ($settings['outlet_name'] ?? '')) !== ''],
@@ -179,7 +185,7 @@ if ($page === 'onboarding' && $method === 'POST') {
 
     try {
         $data = OnboardingData::fromRequest($_POST);
-        $completeOnboardingAction->execute($data);
+        $completeOnboardingAction->execute($data, Auth::businessId());
         Flash::success('Setup bisnis tersimpan. Anda siap lanjut ke dashboard.');
         Response::redirect('/?page=dashboard');
     } catch (Throwable $throwable) {
@@ -188,22 +194,85 @@ if ($page === 'onboarding' && $method === 'POST') {
     }
 }
 
-if ($page === 'dashboard' && $method === 'GET') {
+if ($page === 'pos' && $method === 'GET') {
     $requireAuth();
 
-    if (!$settingsRepository->isOnboardingCompleted()) {
+    if (!$settingsRepository->isOnboardingCompleted(Auth::businessId())) {
         Response::redirect('/?page=onboarding');
     }
 
-    $settings = $settingsRepository->get();
-    $template = $settingsRepository->activeTemplate();
+    $settings = $settingsRepository->get(Auth::businessId());
 
-    $orderCount = (int) $pdo->query("SELECT COUNT(*) FROM orders WHERE status = 'checked_out'")->fetchColumn();
-    $totalRevenueCents = (int) $pdo->query("SELECT COALESCE(SUM(total_cents),0) FROM orders WHERE status = 'checked_out'")->fetchColumn();
+    View::render('pos', [
+        'title' => 'Terminal POS',
+        'settings' => $settings,
+    ]);
+    exit;
+}
+
+if ($page === 'api/products' && $method === 'GET') {
+    $requireAuth();
+    header('Content-Type: application/json');
+    $search = $_GET['q'] ?? null;
+    $products = $productRepository->activeForPos(Auth::businessId(), $search);
+    echo json_encode($products);
+    exit;
+}
+
+if ($page === 'api/checkout' && $method === 'POST') {
+    $requireAuth();
+    header('Content-Type: application/json');
+
+    $payload = json_decode(file_get_contents('php://input'), true);
+
+    if (!Csrf::verify($payload['_csrf'] ?? null)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Sesi form tidak valid.']);
+        exit;
+    }
+
+    try {
+        $items = [];
+        foreach ($payload['items'] ?? [] as $item) {
+            $items[] = new CartItemData(
+                productId: (int) $item['product_id'],
+                qty: (float) $item['qty']
+            );
+        }
+
+        $settings = $settingsRepository->get(Auth::businessId());
+        $taxRate = (float) ($settings['pb1_rate'] ?? 10);
+
+        $data = CheckoutData::fromRequest($payload, $items, Auth::id(), $taxRate, Auth::businessId());
+
+        $processSale = new ProcessSaleAction($pdo, $productRepository, $eventBus);
+        $transaction = $processSale->execute($data);
+
+        echo json_encode(['success' => true, 'transaction_number' => $transaction['transaction_number']]);
+    } catch (Throwable $e) {
+        http_response_code(400);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+if ($page === 'dashboard' && $method === 'GET') {
+    $requireAuth();
+
+    if (!$settingsRepository->isOnboardingCompleted(Auth::businessId())) {
+        Response::redirect('/?page=onboarding');
+    }
+
+    $settings = $settingsRepository->get(Auth::businessId());
+    $template = $settingsRepository->activeTemplate(Auth::businessId());
+
+    $businessId = Auth::businessId();
+    $orderCount = (int) $pdo->query("SELECT COUNT(*) FROM transactions WHERE business_id = {$businessId} AND status = 'checked_out'")->fetchColumn();
+    $totalRevenueCents = (int) $pdo->query("SELECT COALESCE(SUM(total_cents),0) FROM transactions WHERE business_id = {$businessId} AND status = 'checked_out'")->fetchColumn();
 
     $setupChecklist = [
         ['label' => 'Onboarding bisnis selesai', 'done' => true],
-        ['label' => 'Katalog produk minimal 1 item', 'done' => $productRepository->count() > 0],
+        ['label' => 'Katalog produk minimal 1 item', 'done' => $productRepository->count(Auth::businessId()) > 0],
         ['label' => 'Transaksi pertama tercatat', 'done' => $orderCount > 0],
     ];
 
@@ -233,8 +302,8 @@ if ($page === 'dashboard' && $method === 'GET') {
         'setupProgressPercent' => $setupProgressPercent,
         'roleCopy' => $roleCopy,
         'kpi' => [
-            'users' => $userRepository->count(),
-            'products' => $productRepository->count(),
+            'users' => $userRepository->count(Auth::businessId()),
+            'products' => $productRepository->count(Auth::businessId()),
             'orders' => $orderCount,
             'revenue_cents' => $totalRevenueCents,
         ],

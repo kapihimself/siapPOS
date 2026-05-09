@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Siappos\Domain\Order\DTO;
+namespace Siappos\Domain\Transaction\DTO;
 
 use InvalidArgumentException;
 

@@ -76,11 +76,13 @@ final class Database
         $pdo->exec(
             'CREATE TABLE IF NOT EXISTS outlets (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                business_id INTEGER NOT NULL,
                 name TEXT NOT NULL,
                 address TEXT,
                 phone TEXT,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE
             )'
         );
     }

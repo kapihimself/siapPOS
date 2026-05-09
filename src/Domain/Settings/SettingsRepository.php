@@ -12,15 +12,16 @@ final class SettingsRepository
     }
 
     /** @return array<string, mixed> */
-    public function get(): array
+    public function get(int $businessId): array
     {
-        $stmt = $this->pdo->query('SELECT * FROM settings ORDER BY id ASC LIMIT 1');
+        $stmt = $this->pdo->prepare('SELECT * FROM settings WHERE business_id = :business_id ORDER BY id ASC LIMIT 1');
+        $stmt->execute([':business_id' => $businessId]);
         $row = $stmt->fetch();
 
         return is_array($row) ? $row : [];
     }
 
-    public function updateOnboarding(string $businessName, string $outletName, BusinessTemplate $template): void
+    public function updateOnboarding(int $businessId, string $businessName, string $outletName, BusinessTemplate $template): void
     {
         $stmt = $this->pdo->prepare(
             'UPDATE settings
@@ -29,26 +30,27 @@ final class SettingsRepository
                  active_template = :active_template,
                  onboarding_completed = 1,
                  updated_at = CURRENT_TIMESTAMP
-             WHERE id = (SELECT id FROM settings ORDER BY id ASC LIMIT 1)'
+             WHERE business_id = :business_id'
         );
 
         $stmt->execute([
+            ':business_id' => $businessId,
             ':business_name' => $businessName,
             ':outlet_name' => $outletName,
             ':active_template' => $template->value,
         ]);
     }
 
-    public function isOnboardingCompleted(): bool
+    public function isOnboardingCompleted(int $businessId): bool
     {
-        $settings = $this->get();
+        $settings = $this->get($businessId);
 
         return ((int) ($settings['onboarding_completed'] ?? 0)) === 1;
     }
 
-    public function activeTemplate(): BusinessTemplate
+    public function activeTemplate(int $businessId): BusinessTemplate
     {
-        $settings = $this->get();
+        $settings = $this->get($businessId);
         $template = BusinessTemplate::tryFrom((string) ($settings['active_template'] ?? 'retail'));
 
         return $template ?? BusinessTemplate::Retail;
