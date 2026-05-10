@@ -44,12 +44,23 @@ final class ReportRepository
         $stmtCogs->execute([':business_id' => $businessId]);
         $cogsData = $stmtCogs->fetch(PDO::FETCH_ASSOC);
 
+        // Operational Expenses
+        $stmtExpenses = $this->pdo->prepare("
+            SELECT COALESCE(SUM(total_cents), 0) as total_expenses
+            FROM transactions
+            WHERE business_id = :business_id AND type = 'expense'
+        ");
+        $stmtExpenses->execute([':business_id' => $businessId]);
+        $expensesData = $stmtExpenses->fetch(PDO::FETCH_ASSOC);
+
         $totalSales = (int) ($salesData['total_sales'] ?? 0);
         $totalTax = (int) ($salesData['total_tax'] ?? 0);
         $totalPurchases = (int) ($purchasesData['total_purchases'] ?? 0);
         $cogs = (int) ($cogsData['cogs'] ?? 0);
+        $totalExpenses = (int) ($expensesData['total_expenses'] ?? 0);
 
         $grossProfit = $totalSales - $totalTax - $cogs;
+        $netProfit = $grossProfit - $totalExpenses;
 
         return [
             'total_sales' => $totalSales,
@@ -58,6 +69,8 @@ final class ReportRepository
             'total_purchases' => $totalPurchases,
             'cogs' => $cogs,
             'gross_profit' => $grossProfit,
+            'total_expenses' => $totalExpenses,
+            'net_profit' => $netProfit,
         ];
     }
 

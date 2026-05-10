@@ -123,7 +123,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     business_id INTEGER NOT NULL,
     cash_register_id INTEGER,
     transaction_number TEXT NOT NULL UNIQUE,
-    type TEXT NOT NULL CHECK (type IN ('sell', 'purchase', 'stock_adjustment', 'opening_stock', 'sell_return', 'opening_balance')),
+    type TEXT NOT NULL CHECK (type IN ('sell', 'purchase', 'stock_adjustment', 'opening_stock', 'sell_return', 'opening_balance', 'expense')),
     status TEXT NOT NULL CHECK (status IN ('draft', 'checked_out', 'cancelled', 'received', 'pending', 'ordered', 'final', 'quotation', 'proforma')),
     contact_id INTEGER,
     subtotal_cents INTEGER NOT NULL,

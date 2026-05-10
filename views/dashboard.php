@@ -115,8 +115,11 @@ $noTransactionYet = ((int) ($kpi['orders'] ?? 0)) === 0;
                 <?php if (in_array($userRole, ['admin', 'manager'], true)): ?>
                     <a class="btn" href="/?page=onboarding">Perbarui Setup Bisnis</a>
                     <a class="btn" href="/?page=purchases">Pembelian Barang (Restock)</a>
+                    <a class="btn" href="/?page=stock-adjustments">Penyesuaian Stok (Opname)</a>
+                    <a class="btn" href="/?page=contacts">Kontak (Pelanggan/Pemasok)</a>
+                    <a class="btn" href="/?page=expenses">Beban & Pengeluaran</a>
                     <a class="btn" href="/?page=accounts">Akuntansi & Buku Besar</a>
-                    <a class="btn" href="/?page=reports">Laporan Penjualan (Reports)</a>
+                    <a class="btn" href="/?page=reports">Laporan Keuangan (Reports)</a>
                 <?php endif; ?>
                 <a class="btn" href="/?page=pos">POS Terminal</a>
                 <a class="btn" href="/?page=kds">Kitchen Display (KDS)</a>

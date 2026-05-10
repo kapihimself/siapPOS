@@ -41,6 +41,9 @@ $userRepository = new UserRepository($pdo);
 $cashRegisterRepository = new CashRegisterRepository($pdo);
 $accountRepository = new AccountRepository($pdo);
 $reportRepository = new ReportRepository($pdo);
+use Siappos\Domain\Contact\ContactRepository;
+$contactRepository = new ContactRepository($pdo);
+use Siappos\Domain\Accounting\Actions\RecordExpenseAction;
 $categoryRepository = new CategoryRepository($pdo);
 $brandRepository = new BrandRepository($pdo);
 $productRepository = new ProductRepository($pdo);
@@ -482,6 +485,135 @@ if ($page === 'reports' && $method === 'GET') {
         'trendingProducts' => $reportRepository->getTrendingProducts(Auth::businessId()),
     ]);
     exit;
+}
+
+if ($page === 'contacts' && $method === 'GET') {
+    $requireAuth();
+    View::render('contacts', [
+        'title' => 'CRM Kontak',
+        'contacts' => $contactRepository->all(Auth::businessId())
+    ]);
+    exit;
+}
+
+if ($page === 'contacts/store' && $method === 'POST') {
+    $requireAuth();
+    $requireCsrf('contacts');
+
+    try {
+        $contactRepository->create(
+            Auth::businessId(),
+            $_POST['type'] ?? 'customer',
+            $_POST['name'] ?? '',
+            $_POST['email'] ?: null,
+            $_POST['phone'] ?: null,
+            $_POST['address'] ?: null
+        );
+        Flash::success('Kontak berhasil ditambahkan.');
+    } catch (\Exception $e) {
+        Flash::error('Gagal menambahkan kontak: ' . $e->getMessage());
+    }
+
+    Response::redirect('/?page=contacts');
+}
+
+if ($page === 'expenses' && $method === 'GET') {
+    $requireAuth();
+    $stmt = $pdo->prepare("SELECT * FROM transactions WHERE business_id = :business_id AND type = 'expense' ORDER BY created_at DESC");
+    $stmt->execute([':business_id' => Auth::businessId()]);
+    $expenses = $stmt->fetchAll();
+
+    View::render('expenses', [
+        'title' => 'Pengeluaran',
+        'accounts' => $accountRepository->all(Auth::businessId()),
+        'expenses' => $expenses
+    ]);
+    exit;
+}
+
+if ($page === 'expenses/store' && $method === 'POST') {
+    $requireAuth();
+    $requireCsrf('expenses');
+
+    try {
+        $action = new \Siappos\Domain\Accounting\Actions\RecordExpenseAction($pdo);
+        $amountCents = (int) ($_POST['amount'] ?? 0) * 100;
+
+        $action->execute(
+            Auth::businessId(),
+            (int) $_POST['account_id'],
+            $amountCents,
+            $_POST['payment_method'] ?? 'cash',
+            $_POST['description'] ?? '',
+            Auth::id()
+        );
+
+        Flash::success('Pengeluaran berhasil dicatat.');
+    } catch (\Exception $e) {
+        Flash::error('Gagal mencatat pengeluaran: ' . $e->getMessage());
+    }
+
+    Response::redirect('/?page=expenses');
+}
+
+if ($page === 'stock-adjustments' && $method === 'GET') {
+    $requireAuth();
+    $stmt = $pdo->prepare("SELECT * FROM transactions WHERE business_id = :business_id AND type = 'stock_adjustment' ORDER BY created_at DESC");
+    $stmt->execute([':business_id' => Auth::businessId()]);
+
+    View::render('stock-adjustments', [
+        'title' => 'Penyesuaian Stok',
+        'adjustments' => $stmt->fetchAll()
+    ]);
+    exit;
+}
+
+if ($page === 'stock-adjustments/create' && $method === 'GET') {
+    $requireAuth();
+    View::render('stock-adjustment-form', [
+        'title' => 'Buat Penyesuaian Stok',
+        'products' => $productRepository->activeForPos(Auth::businessId())
+    ]);
+    exit;
+}
+
+if ($page === 'stock-adjustments/store' && $method === 'POST') {
+    $requireAuth();
+    $requireCsrf('stock-adjustments/create');
+
+    try {
+        $action = new \Siappos\Domain\Transaction\Actions\AdjustStockAction($pdo, $productRepository);
+
+        $parsedLines = [];
+        foreach (($_POST['lines'] ?? []) as $line) {
+            if (empty($line['product_data']) || empty($line['qty'])) continue;
+
+            $parts = explode('|', $line['product_data']);
+            $parsedLines[] = [
+                'product_id' => (int) $parts[0],
+                'variation_id' => empty($parts[1]) ? null : (int) $parts[1],
+                'qty' => (float) $line['qty'],
+                'type' => $line['action_type'] === 'add' ? 'add' : 'subtract',
+            ];
+        }
+
+        if (empty($parsedLines)) {
+            throw new \Exception('Minimal harus ada 1 produk yang disesuaikan.');
+        }
+
+        $action->execute(
+            Auth::businessId(),
+            $_POST['type'] ?? 'normal',
+            $parsedLines,
+            Auth::id()
+        );
+
+        Flash::success('Penyesuaian stok berhasil disimpan.');
+        Response::redirect('/?page=stock-adjustments');
+    } catch (\Exception $e) {
+        Flash::error('Gagal menyesuaikan stok: ' . $e->getMessage());
+        Response::redirect('/?page=stock-adjustments/create');
+    }
 }
 
 if ($page === 'categories' && $method === 'GET') {

@@ -237,6 +237,60 @@ final class ProductRepository
         ]);
     }
 
+
+
+    public function adjustStock(int $id, float $quantityDelta, int $businessId, ?int $variationId = null): void
+    {
+        if ($variationId !== null) {
+            $stmt = $this->pdo->prepare('SELECT stock_qty FROM product_variations WHERE id = :id AND product_id = :product_id LIMIT 1');
+            $stmt->execute([':id' => $variationId, ':product_id' => $id]);
+            $currentStock = $stmt->fetchColumn();
+
+            if ($currentStock === false) {
+                throw new \RuntimeException('Variasi produk tidak ditemukan saat update stok.');
+            }
+
+            $newStock = (float) $currentStock + $quantityDelta;
+            if ($newStock < 0) {
+                throw new \RuntimeException('Stok tidak boleh negatif.');
+            }
+
+            $updateStmt = $this->pdo->prepare(
+                'UPDATE product_variations SET stock_qty = :new_stock, updated_at = CURRENT_TIMESTAMP WHERE id = :id'
+            );
+            $updateStmt->execute([
+                ':id' => $variationId,
+                ':new_stock' => round($newStock, 3),
+            ]);
+
+            return;
+        }
+
+        $product = $this->find($id, $businessId);
+
+        if (!is_array($product)) {
+            throw new \RuntimeException('Produk tidak ditemukan saat update stok.');
+        }
+
+        $currentStock = (float) $product['stock_qty'];
+        $newStock = $currentStock + $quantityDelta;
+
+        if ($newStock < 0) {
+            throw new \RuntimeException('Stok produk tidak boleh negatif.');
+        }
+
+        $stmt = $this->pdo->prepare(
+            'UPDATE products SET stock_qty = :new_stock, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND business_id = :business_id'
+        );
+
+        $stmt->execute([
+            ':id' => $id,
+            ':business_id' => $businessId,
+            ':new_stock' => round($newStock, 3),
+        ]);
+    }
+
+
     public function count(int $businessId): int
     {
         $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM products WHERE business_id = :business_id');

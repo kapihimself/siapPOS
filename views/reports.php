@@ -26,10 +26,22 @@ $formatRupiah = static fn (int $cents): string => 'Rp ' . number_format($cents /
                     <td style="padding: 10px 0;">Harga Pokok Penjualan (HPP / COGS)</td>
                     <td style="padding: 10px 0; text-align: right; color: #e74c3c;">- <?= $formatRupiah((int) $profitLoss['cogs']) ?></td>
                 </tr>
-                <tr style="font-weight: bold; font-size: 1.2em;">
+                <tr style="font-weight: bold; font-size: 1.1em; border-bottom: 2px solid var(--line);">
                     <td style="padding: 15px 0;">Laba Kotor (Gross Profit)</td>
                     <td style="padding: 15px 0; text-align: right; color: <?= ((int)$profitLoss['gross_profit'] >= 0) ? '#2ecc71' : '#e74c3c' ?>;">
                         <?= $formatRupiah((int) $profitLoss['gross_profit']) ?>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px 0; color: #e74c3c;">Total Pengeluaran Operasional (OPEX)</td>
+                    <td style="padding: 10px 0; text-align: right; color: #e74c3c;">
+                        - <?= $formatRupiah((int) $profitLoss['total_expenses']) ?>
+                    </td>
+                </tr>
+                <tr style="font-weight: bold; font-size: 1.2em;">
+                    <td style="padding: 15px 0;">Laba Bersih (Net Profit)</td>
+                    <td style="padding: 15px 0; text-align: right; color: <?= ((int)$profitLoss['net_profit'] >= 0) ? '#2ecc71' : '#e74c3c' ?>;">
+                        <?= $formatRupiah((int) $profitLoss['net_profit']) ?>
                     </td>
                 </tr>
             </table>
