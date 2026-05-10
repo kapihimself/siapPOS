@@ -123,12 +123,13 @@
         // Note: taxRate extraction is simplified, ideally passed via data attribute
 
         window.posAddToCart = function(product) {
-            var existing = cartItems.find(item => item.product_id === product.id);
+            var existing = cartItems.find(item => item.product_id === product.id && item.variation_id === product.variation_id);
             if (existing) {
                 existing.qty += 1;
             } else {
                 cartItems.push({
                     product_id: product.id,
+                    variation_id: product.variation_id,
                     name: product.name,
                     price_cents: product.price_cents,
                     qty: 1

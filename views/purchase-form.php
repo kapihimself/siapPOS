@@ -125,10 +125,13 @@ document.addEventListener('DOMContentLoaded', function() {
         tr.id = 'line_row_' + idx;
         tr.style.borderBottom = '1px solid #eee';
 
+        var variationInput = product.variation_id ? `<input type="hidden" name="lines[${idx}][variation_id]" value="${product.variation_id}">` : '';
+
         tr.innerHTML = `
             <td style="padding: 10px;">
                 ${product.name}
                 <input type="hidden" name="lines[${idx}][product_id]" value="${product.id}">
+                ${variationInput}
                 <input type="hidden" name="lines[${idx}][product_name]" value="${product.name}">
             </td>
             <td style="padding: 10px;">

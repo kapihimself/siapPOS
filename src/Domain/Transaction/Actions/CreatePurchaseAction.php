@@ -65,9 +65,9 @@ final class CreatePurchaseAction
             // 3. Masukkan line items dan tambah stok
             $stmtLine = $this->pdo->prepare(
                 'INSERT INTO purchase_lines (
-                    transaction_id, product_id, product_name, qty, unit_price_cents, line_total_cents
+                    transaction_id, product_id, variation_id, product_name, qty, unit_price_cents, line_total_cents
                 ) VALUES (
-                    :transaction_id, :product_id, :product_name, :qty, :unit_price_cents, :line_total_cents
+                    :transaction_id, :product_id, :variation_id, :product_name, :qty, :unit_price_cents, :line_total_cents
                 )'
             );
 
@@ -75,10 +75,15 @@ final class CreatePurchaseAction
                 'UPDATE products SET stock_qty = stock_qty + :qty, updated_at = CURRENT_TIMESTAMP WHERE id = :id AND business_id = :business_id'
             );
 
+            $stmtUpdateVariationStock = $this->pdo->prepare(
+                'UPDATE product_variations SET stock_qty = stock_qty + :qty, updated_at = CURRENT_TIMESTAMP WHERE id = :id'
+            );
+
             foreach ($data->lines as $line) {
                 $stmtLine->execute([
                     ':transaction_id' => $transactionId,
                     ':product_id' => $line->productId,
+                    ':variation_id' => $line->variationId,
                     ':product_name' => $line->productName,
                     ':qty' => $line->qty,
                     ':unit_price_cents' => $line->unitPriceCents,
@@ -86,11 +91,18 @@ final class CreatePurchaseAction
                 ]);
 
                 if ($data->status === 'received' || $data->status === 'final') {
-                    $stmtUpdateStock->execute([
-                        ':qty' => $line->qty,
-                        ':id' => $line->productId,
-                        ':business_id' => $data->businessId,
-                    ]);
+                    if ($line->variationId !== null) {
+                        $stmtUpdateVariationStock->execute([
+                            ':qty' => $line->qty,
+                            ':id' => $line->variationId,
+                        ]);
+                    } else {
+                        $stmtUpdateStock->execute([
+                            ':qty' => $line->qty,
+                            ':id' => $line->productId,
+                            ':business_id' => $data->businessId,
+                        ]);
+                    }
                 }
             }
 

@@ -20,6 +20,7 @@ final class CheckoutData
         public readonly int $actorUserId,
         public readonly ?int $contactId = null,
         public readonly string $type = 'sell',
+        public readonly ?int $cashRegisterId = null,
     ) {
         if ($this->items === []) {
             throw new InvalidArgumentException('Keranjang masih kosong.');
@@ -53,7 +54,7 @@ final class CheckoutData
     }
 
     /** @param list<CartItemData> $items */
-    public static function fromRequest(array $payload, array $items, int $actorUserId, float $taxRate, int $businessId): self
+    public static function fromRequest(array $payload, array $items, int $actorUserId, float $taxRate, int $businessId, ?int $cashRegisterId = null): self
     {
         $discountType = (string) ($payload['discount_type'] ?? 'none');
         $discountRaw = (string) ($payload['discount_value'] ?? '0');
@@ -76,6 +77,7 @@ final class CheckoutData
             actorUserId: $actorUserId,
             contactId: $contactId,
             type: $type,
+            cashRegisterId: $cashRegisterId,
         );
     }
 

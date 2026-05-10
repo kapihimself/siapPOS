@@ -30,7 +30,7 @@ final class ProcessSaleAction
             $lines = [];
 
             foreach ($data->items as $item) {
-                $product = $this->products->find($item->productId, $data->businessId);
+                $product = $this->products->find($item->productId, $data->businessId, $item->variationId);
 
                 if (!is_array($product)) {
                     throw new RuntimeException("Produk ID {$item->productId} tidak ditemukan.");
@@ -46,6 +46,7 @@ final class ProcessSaleAction
 
                 $lines[] = [
                     'product_id' => $item->productId,
+                    'variation_id' => $item->variationId,
                     'product_name' => (string) $product['name'],
                     'qty' => $item->qty,
                     'unit_price_cents' => $priceCents,
@@ -71,12 +72,12 @@ final class ProcessSaleAction
 
             $stmt = $this->pdo->prepare(
                 'INSERT INTO transactions (
-                    business_id, transaction_number, type, status, contact_id,
+                    business_id, cash_register_id, transaction_number, type, status, contact_id,
                     subtotal_cents, discount_type, discount_value, discount_cents,
                     tax_rate, tax_cents, total_cents, payment_method,
                     cash_received_cents, change_cents, created_by
                 ) VALUES (
-                    :business_id, :transaction_number, :type, :status, :contact_id,
+                    :business_id, :cash_register_id, :transaction_number, :type, :status, :contact_id,
                     :subtotal_cents, :discount_type, :discount_value, :discount_cents,
                     :tax_rate, :tax_cents, :total_cents, :payment_method,
                     :cash_received_cents, :change_cents, :created_by
@@ -85,6 +86,7 @@ final class ProcessSaleAction
 
             $stmt->execute([
                 ':business_id' => $data->businessId,
+                ':cash_register_id' => $data->cashRegisterId,
                 ':transaction_number' => $transactionNumber,
                 ':type' => $data->type,
                 ':status' => 'checked_out',
@@ -107,15 +109,15 @@ final class ProcessSaleAction
             // 4. Masukkan line items dan implementasi FIFO Stock Deduction
             $stmtLine = $this->pdo->prepare(
                 'INSERT INTO transaction_sell_lines (
-                    transaction_id, product_id, product_name, qty, unit_price_cents, line_total_cents
+                    transaction_id, product_id, variation_id, product_name, qty, unit_price_cents, line_total_cents
                 ) VALUES (
-                    :transaction_id, :product_id, :product_name, :qty, :unit_price_cents, :line_total_cents
+                    :transaction_id, :product_id, :variation_id, :product_name, :qty, :unit_price_cents, :line_total_cents
                 )'
             );
 
             $stmtPurchaseLines = $this->pdo->prepare(
                 'SELECT id, qty, qty_sold FROM purchase_lines
-                 WHERE product_id = :product_id AND qty > qty_sold
+                 WHERE product_id = :product_id AND (variation_id = :variation_id OR (variation_id IS NULL AND :variation_id IS NULL)) AND qty > qty_sold
                  ORDER BY created_at ASC'
             );
 
@@ -136,6 +138,7 @@ final class ProcessSaleAction
                 $stmtLine->execute([
                     ':transaction_id' => $transactionId,
                     ':product_id' => $line['product_id'],
+                    ':variation_id' => $line['variation_id'],
                     ':product_name' => $line['product_name'],
                     ':qty' => $line['qty'],
                     ':unit_price_cents' => $line['unit_price_cents'],
@@ -144,10 +147,13 @@ final class ProcessSaleAction
                 $sellLineId = (int) $this->pdo->lastInsertId();
 
                 // Deduct master stock
-                $this->products->decrementStock($line['product_id'], $line['qty'], $data->businessId);
+                $this->products->decrementStock($line['product_id'], $line['qty'], $data->businessId, $line['variation_id']);
 
                 // FIFO Logic: Fetch available purchase lines
-                $stmtPurchaseLines->execute([':product_id' => $line['product_id']]);
+                $stmtPurchaseLines->execute([
+                    ':product_id' => $line['product_id'],
+                    ':variation_id' => $line['variation_id']
+                ]);
                 $availableLots = $stmtPurchaseLines->fetchAll();
 
                 $qtyToDeduct = (float) $line['qty'];

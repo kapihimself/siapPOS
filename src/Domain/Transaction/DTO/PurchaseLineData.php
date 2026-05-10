@@ -13,6 +13,7 @@ final class PurchaseLineData
         public readonly float $qty,
         public readonly int $unitPriceCents,
         public readonly int $lineTotalCents,
+        public readonly ?int $variationId = null,
     ) {
         if ($this->productId <= 0) {
             throw new InvalidArgumentException('Produk tidak valid di baris pembelian.');
