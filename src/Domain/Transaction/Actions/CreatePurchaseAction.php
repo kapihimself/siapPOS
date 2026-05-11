@@ -76,10 +76,23 @@ final class CreatePurchaseAction
             );
 
             $stmtUpdateVariationStock = $this->pdo->prepare(
-                'UPDATE product_variations SET stock_qty = stock_qty + :qty, updated_at = CURRENT_TIMESTAMP WHERE id = :id'
+                'UPDATE product_variations SET stock_qty = stock_qty + :qty, updated_at = CURRENT_TIMESTAMP
+                 WHERE id = :id AND product_id IN (SELECT id FROM products WHERE business_id = :business_id)'
             );
 
+            $stmtVerifyProduct = $this->pdo->prepare('SELECT id FROM products WHERE id = :id AND business_id = :business_id');
+
             foreach ($data->lines as $line) {
+                $stmtVerifyProduct->execute([':id' => $line->productId, ':business_id' => $data->businessId]);
+                if (!$stmtVerifyProduct->fetch()) {
+                    throw new RuntimeException('Produk tidak ditemukan atau tidak valid.');
+                }
+
+                // If not final/received, don't insert lines so FIFO doesn't consume them.
+                // A better approach would be to insert lines but update ProcessSaleAction to ignore pending.
+                // We've already updated ProcessSaleAction/AdjustStockAction FIFO logic to check 'received', 'final',
+                // so it's safe to insert lines here for pending orders.
+
                 $stmtLine->execute([
                     ':transaction_id' => $transactionId,
                     ':product_id' => $line->productId,
@@ -95,6 +108,7 @@ final class CreatePurchaseAction
                         $stmtUpdateVariationStock->execute([
                             ':qty' => $line->qty,
                             ':id' => $line->variationId,
+                            ':business_id' => $data->businessId,
                         ]);
                     } else {
                         $stmtUpdateStock->execute([

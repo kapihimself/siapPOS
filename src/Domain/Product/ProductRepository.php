@@ -190,8 +190,12 @@ final class ProductRepository
     public function decrementStock(int $id, float $quantity, int $businessId, ?int $variationId = null): void
     {
         if ($variationId !== null) {
-            $stmt = $this->pdo->prepare('SELECT stock_qty FROM product_variations WHERE id = :id AND product_id = :product_id LIMIT 1');
-            $stmt->execute([':id' => $variationId, ':product_id' => $id]);
+            $stmt = $this->pdo->prepare('
+                SELECT pv.stock_qty FROM product_variations pv
+                JOIN products p ON pv.product_id = p.id
+                WHERE pv.id = :id AND pv.product_id = :product_id AND p.business_id = :business_id LIMIT 1
+            ');
+            $stmt->execute([':id' => $variationId, ':product_id' => $id, ':business_id' => $businessId]);
             $currentStock = $stmt->fetchColumn();
 
             if ($currentStock === false) {
@@ -242,8 +246,12 @@ final class ProductRepository
     public function adjustStock(int $id, float $quantityDelta, int $businessId, ?int $variationId = null): void
     {
         if ($variationId !== null) {
-            $stmt = $this->pdo->prepare('SELECT stock_qty FROM product_variations WHERE id = :id AND product_id = :product_id LIMIT 1');
-            $stmt->execute([':id' => $variationId, ':product_id' => $id]);
+            $stmt = $this->pdo->prepare('
+                SELECT pv.stock_qty FROM product_variations pv
+                JOIN products p ON pv.product_id = p.id
+                WHERE pv.id = :id AND pv.product_id = :product_id AND p.business_id = :business_id LIMIT 1
+            ');
+            $stmt->execute([':id' => $variationId, ':product_id' => $id, ':business_id' => $businessId]);
             $currentStock = $stmt->fetchColumn();
 
             if ($currentStock === false) {
