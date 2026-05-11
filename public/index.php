@@ -489,6 +489,11 @@ if ($page === 'reports' && $method === 'GET') {
 
 if ($page === 'contacts' && $method === 'GET') {
     $requireAuth();
+    if (!Auth::hasAnyRole('admin', 'manager')) {
+        Flash::error('Akses ditolak. Anda tidak memiliki izin.');
+        Response::redirect('/?page=dashboard');
+    }
+
     View::render('contacts', [
         'title' => 'CRM Kontak',
         'contacts' => $contactRepository->all(Auth::businessId())
@@ -499,15 +504,20 @@ if ($page === 'contacts' && $method === 'GET') {
 if ($page === 'contacts/store' && $method === 'POST') {
     $requireAuth();
     $requireCsrf('contacts');
+    if (!Auth::hasAnyRole('admin', 'manager')) {
+        Flash::error('Akses ditolak. Anda tidak memiliki izin.');
+        Response::redirect('/?page=dashboard');
+    }
+
 
     try {
         $contactRepository->create(
             Auth::businessId(),
             $_POST['type'] ?? 'customer',
             $_POST['name'] ?? '',
-            $_POST['email'] ?: null,
-            $_POST['phone'] ?: null,
-            $_POST['address'] ?: null
+            empty($_POST['email']) ? null : $_POST['email'],
+            empty($_POST['phone']) ? null : $_POST['phone'],
+            empty($_POST['address']) ? null : $_POST['address']
         );
         Flash::success('Kontak berhasil ditambahkan.');
     } catch (\Exception $e) {
@@ -519,6 +529,11 @@ if ($page === 'contacts/store' && $method === 'POST') {
 
 if ($page === 'expenses' && $method === 'GET') {
     $requireAuth();
+    if (!Auth::hasAnyRole('admin', 'manager')) {
+        Flash::error('Akses ditolak. Anda tidak memiliki izin.');
+        Response::redirect('/?page=dashboard');
+    }
+
     $stmt = $pdo->prepare("SELECT * FROM transactions WHERE business_id = :business_id AND type = 'expense' ORDER BY created_at DESC");
     $stmt->execute([':business_id' => Auth::businessId()]);
     $expenses = $stmt->fetchAll();
@@ -534,6 +549,11 @@ if ($page === 'expenses' && $method === 'GET') {
 if ($page === 'expenses/store' && $method === 'POST') {
     $requireAuth();
     $requireCsrf('expenses');
+    if (!Auth::hasAnyRole('admin', 'manager')) {
+        Flash::error('Akses ditolak. Anda tidak memiliki izin.');
+        Response::redirect('/?page=dashboard');
+    }
+
 
     try {
         $action = new \Siappos\Domain\Accounting\Actions\RecordExpenseAction($pdo);
@@ -558,6 +578,11 @@ if ($page === 'expenses/store' && $method === 'POST') {
 
 if ($page === 'stock-adjustments' && $method === 'GET') {
     $requireAuth();
+    if (!Auth::hasAnyRole('admin', 'manager')) {
+        Flash::error('Akses ditolak. Anda tidak memiliki izin.');
+        Response::redirect('/?page=dashboard');
+    }
+
     $stmt = $pdo->prepare("SELECT * FROM transactions WHERE business_id = :business_id AND type = 'stock_adjustment' ORDER BY created_at DESC");
     $stmt->execute([':business_id' => Auth::businessId()]);
 
@@ -570,6 +595,11 @@ if ($page === 'stock-adjustments' && $method === 'GET') {
 
 if ($page === 'stock-adjustments/create' && $method === 'GET') {
     $requireAuth();
+    if (!Auth::hasAnyRole('admin', 'manager')) {
+        Flash::error('Akses ditolak. Anda tidak memiliki izin.');
+        Response::redirect('/?page=dashboard');
+    }
+
     View::render('stock-adjustment-form', [
         'title' => 'Buat Penyesuaian Stok',
         'products' => $productRepository->activeForPos(Auth::businessId())
@@ -580,6 +610,11 @@ if ($page === 'stock-adjustments/create' && $method === 'GET') {
 if ($page === 'stock-adjustments/store' && $method === 'POST') {
     $requireAuth();
     $requireCsrf('stock-adjustments/create');
+    if (!Auth::hasAnyRole('admin', 'manager')) {
+        Flash::error('Akses ditolak. Anda tidak memiliki izin.');
+        Response::redirect('/?page=dashboard');
+    }
+
 
     try {
         $action = new \Siappos\Domain\Transaction\Actions\AdjustStockAction($pdo, $productRepository);
@@ -614,6 +649,35 @@ if ($page === 'stock-adjustments/store' && $method === 'POST') {
         Flash::error('Gagal menyesuaikan stok: ' . $e->getMessage());
         Response::redirect('/?page=stock-adjustments/create');
     }
+}
+
+if ($page === 'accounts/transfer' && $method === 'POST') {
+    $requireAuth();
+    $requireCsrf('accounts');
+
+    if (!Auth::hasAnyRole('admin', 'manager')) {
+        Flash::error('Akses ditolak. Anda tidak memiliki izin.');
+        Response::redirect('/?page=dashboard');
+    }
+
+    try {
+        $action = new \Siappos\Domain\Accounting\Actions\TransferFundAction($pdo);
+        $amountCents = (int) ($_POST['amount'] ?? 0) * 100;
+
+        $action->execute(
+            Auth::businessId(),
+            (int) $_POST['from_account_id'],
+            (int) $_POST['to_account_id'],
+            $amountCents,
+            $_POST['description'] ?? 'Mutasi antar akun'
+        );
+
+        Flash::success('Mutasi dana berhasil.');
+    } catch (\Exception $e) {
+        Flash::error('Gagal mutasi dana: ' . $e->getMessage());
+    }
+
+    Response::redirect('/?page=accounts');
 }
 
 if ($page === 'categories' && $method === 'GET') {

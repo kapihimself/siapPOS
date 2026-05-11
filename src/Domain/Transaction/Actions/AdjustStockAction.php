@@ -80,7 +80,6 @@ final class AdjustStockAction
                 $this->products->adjustStock($line['product_id'], $qtyDelta, $businessId, $line['variation_id']);
 
                 // Insert into transaction lines to keep track of WHAT was adjusted
-                // We reuse transaction_sell_lines because STI treats it as a generic line item
                 $stmtLine->execute([
                     ':transaction_id' => $transactionId,
                     ':product_id' => $line['product_id'],
@@ -88,6 +87,54 @@ final class AdjustStockAction
                     ':product_name' => $product['name'] . ($line['type'] === 'subtract' ? ' (Pengurangan)' : ' (Penambahan)'),
                     ':qty' => abs($line['qty']),
                 ]);
+                $sellLineId = (int) $this->pdo->lastInsertId();
+
+                // Maintain FIFO Integrity for Subtractions
+                if ($line['type'] === 'subtract') {
+                    $stmtPurchaseLines = $this->pdo->prepare(
+                        'SELECT id, qty, qty_sold FROM purchase_lines
+                         WHERE product_id = :product_id AND (variation_id = :variation_id OR (variation_id IS NULL AND :variation_id IS NULL)) AND qty > qty_sold
+                         ORDER BY created_at ASC'
+                    );
+                    $stmtUpdatePurchaseLine = $this->pdo->prepare(
+                        'UPDATE purchase_lines SET qty_sold = qty_sold + :qty_sold WHERE id = :id'
+                    );
+                    $stmtMapping = $this->pdo->prepare(
+                        'INSERT INTO transaction_sell_lines_purchase_lines (
+                            sell_line_id, purchase_line_id, qty
+                        ) VALUES (
+                            :sell_line_id, :purchase_line_id, :qty
+                        )'
+                    );
+
+                    $stmtPurchaseLines->execute([
+                        ':product_id' => $line['product_id'],
+                        ':variation_id' => $line['variation_id']
+                    ]);
+                    $availableLots = $stmtPurchaseLines->fetchAll();
+
+                    $qtyToDeduct = (float) abs($line['qty']);
+
+                    foreach ($availableLots as $lot) {
+                        if ($qtyToDeduct <= 0) break;
+
+                        $availableQtyInLot = (float) $lot['qty'] - (float) $lot['qty_sold'];
+                        $deductedFromLot = min($qtyToDeduct, $availableQtyInLot);
+
+                        $stmtUpdatePurchaseLine->execute([
+                            ':qty_sold' => $deductedFromLot,
+                            ':id' => $lot['id']
+                        ]);
+
+                        $stmtMapping->execute([
+                            ':sell_line_id' => $sellLineId,
+                            ':purchase_line_id' => $lot['id'],
+                            ':qty' => $deductedFromLot
+                        ]);
+
+                        $qtyToDeduct -= $deductedFromLot;
+                    }
+                }
             }
 
             $this->pdo->commit();

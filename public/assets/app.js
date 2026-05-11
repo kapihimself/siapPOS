@@ -138,17 +138,17 @@
             renderCart();
         };
 
-        window.posRemoveFromCart = function(productId) {
-            cartItems = cartItems.filter(item => item.product_id !== productId);
+        window.posRemoveFromCart = function(productId, variationId) {
+            cartItems = cartItems.filter(item => !(item.product_id === productId && item.variation_id === variationId));
             renderCart();
         };
 
-        window.posUpdateQty = function(productId, qty) {
-            var item = cartItems.find(i => i.product_id === productId);
+        window.posUpdateQty = function(productId, variationId, qty) {
+            var item = cartItems.find(i => i.product_id === productId && i.variation_id === variationId);
             if (item) {
                 item.qty = parseFloat(qty);
                 if (item.qty <= 0) {
-                    window.posRemoveFromCart(productId);
+                    window.posRemoveFromCart(productId, variationId);
                 } else {
                     renderCart();
                 }
@@ -170,9 +170,9 @@
                 tr.innerHTML = `
                     <td style="padding: 10px 0;">${item.name}</td>
                     <td>Rp ${(item.price_cents / 100).toLocaleString('id-ID')}</td>
-                    <td><input type="number" value="${item.qty}" min="0.1" step="0.1" style="width: 70px; margin: 0;" onchange="window.posUpdateQty(${item.product_id}, this.value)"></td>
+                    <td><input type="number" value="${item.qty}" min="0.1" step="0.1" style="width: 70px; margin: 0;" onchange="window.posUpdateQty(${item.product_id}, ${item.variation_id || 'null'}, this.value)"></td>
                     <td>Rp ${(lineTotal / 100).toLocaleString('id-ID')}</td>
-                    <td><button type="button" class="btn btn-danger" onclick="window.posRemoveFromCart(${item.product_id})">Hapus</button></td>
+                    <td><button type="button" class="btn btn-danger" onclick="window.posRemoveFromCart(${item.product_id}, ${item.variation_id || 'null'})">Hapus</button></td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -232,7 +232,7 @@
                 btnCheckout.textContent = 'Memproses...';
 
                 var payload = {
-                    items: cartItems.map(i => ({ product_id: i.product_id, qty: i.qty })),
+                    items: cartItems.map(i => ({ product_id: i.product_id, variation_id: i.variation_id, qty: i.qty })),
                     discount_type: document.getElementById('discount-type').value,
                     discount_value: document.getElementById('discount-value').value,
                     payment_method: document.getElementById('payment-method').value,
