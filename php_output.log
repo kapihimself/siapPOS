@@ -8,3 +8,18 @@
 [Thu May 14 06:22:31 2026] 127.0.0.1:50242 Accepted
 [Thu May 14 06:22:31 2026] 127.0.0.1:50242 [302]: POST /?page=contacts/pay
 [Thu May 14 06:22:31 2026] 127.0.0.1:50242 Closing
+[Thu May 14 15:52:05 2026] 127.0.0.1:41418 Accepted
+[Thu May 14 15:52:05 2026] 127.0.0.1:41418 [302]: GET /?page=reports
+[Thu May 14 15:52:05 2026] 127.0.0.1:41418 Closing
+[Thu May 14 15:52:37 2026] 127.0.0.1:44006 Accepted
+[Thu May 14 15:52:37 2026] 127.0.0.1:44006 [404]: POST /?page=login/submit
+[Thu May 14 15:52:37 2026] 127.0.0.1:44006 Closing
+[Thu May 14 15:53:05 2026] 127.0.0.1:43348 Accepted
+[Thu May 14 15:53:05 2026] 127.0.0.1:43348 [200]: GET /?page=login
+[Thu May 14 15:53:05 2026] 127.0.0.1:43348 Closing
+[Thu May 14 15:58:34 2026] 127.0.0.1:44106 Accepted
+[Thu May 14 15:58:34 2026] 127.0.0.1:44106 [200]: GET /?page=login
+[Thu May 14 15:58:34 2026] 127.0.0.1:44106 Closing
+[Thu May 14 15:58:34 2026] 127.0.0.1:44122 Accepted
+[Thu May 14 15:58:34 2026] 127.0.0.1:44122 [404]: POST /?page=login/submit
+[Thu May 14 15:58:34 2026] 127.0.0.1:44122 Closing
