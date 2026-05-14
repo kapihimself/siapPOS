@@ -12,7 +12,7 @@ final class CloseRegisterAction
     {
     }
 
-    public function execute(int $businessId, int $userId, int $closingAmountCents): void
+    public function execute(int $businessId, int $userId, int $closingAmountCents): int
     {
         $activeRegister = $this->repository->getActiveRegister($businessId, $userId);
 
@@ -25,5 +25,6 @@ final class CloseRegisterAction
         }
 
         $this->repository->closeRegister((int) $activeRegister['id'], $closingAmountCents);
+        return (int) $activeRegister['id'];
     }
 }

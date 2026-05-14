@@ -28,6 +28,9 @@ use Siappos\Domain\Transaction\DTO\PurchaseLineData;
 use Siappos\Shared\Csrf;
 use Siappos\Shared\Flash;
 use Siappos\Shared\EventBus;
+use Siappos\Domain\Restaurant\TableRepository;
+use Siappos\Domain\Contact\ContactRepository;
+use Siappos\Domain\Accounting\Actions\RecordExpenseAction;
 
 header('X-Frame-Options: DENY');
 header('X-Content-Type-Options: nosniff');
@@ -41,9 +44,8 @@ $userRepository = new UserRepository($pdo);
 $cashRegisterRepository = new CashRegisterRepository($pdo);
 $accountRepository = new AccountRepository($pdo);
 $reportRepository = new ReportRepository($pdo);
-use Siappos\Domain\Contact\ContactRepository;
+$tableRepository = new TableRepository($pdo);
 $contactRepository = new ContactRepository($pdo);
-use Siappos\Domain\Accounting\Actions\RecordExpenseAction;
 $categoryRepository = new CategoryRepository($pdo);
 $brandRepository = new BrandRepository($pdo);
 $productRepository = new ProductRepository($pdo);
@@ -232,10 +234,12 @@ if ($page === 'pos' && $method === 'GET') {
 
     $settings = $settingsRepository->get(Auth::businessId());
 
-    View::render('pos', [
+            View::render('pos', [
         'title' => 'Terminal POS',
         'settings' => $settings,
         'activeRegister' => $activeRegister,
+        'agents' => $userRepository->getCommissionAgents(Auth::businessId()),
+        'tables' => ($settings['active_template'] ?? '') === 'fnb' ? $tableRepository->all(Auth::businessId()) : []
     ]);
     exit;
 }
@@ -260,9 +264,9 @@ if ($page === 'pos/close-register' && $method === 'POST') {
 
     try {
         $closingAmount = (int) ($_POST['closing_amount'] ?? 0);
-        $closeRegisterAction->execute(Auth::businessId(), Auth::id(), $closingAmount * 100);
+        $registerId = $closeRegisterAction->execute(Auth::businessId(), Auth::id(), $closingAmount * 100);
         Flash::success('Shift kasir berhasil ditutup.');
-        Response::redirect('/?page=dashboard');
+        Response::redirect('/?page=pos/z-report&id=' . $registerId);
     } catch (Throwable $throwable) {
         Flash::error($throwable->getMessage());
         Response::redirect('/?page=pos');
@@ -527,6 +531,74 @@ if ($page === 'contacts/store' && $method === 'POST') {
     Response::redirect('/?page=contacts');
 }
 
+if ($page === 'contacts/ledger' && $method === 'GET') {
+    $requireAuth();
+    if (!Auth::hasAnyRole('admin', 'manager', 'cashier')) {
+        Flash::error('Akses ditolak.');
+        Response::redirect('/?page=dashboard');
+    }
+
+    $id = (int) ($_GET['id'] ?? 0);
+    $contact = $contactRepository->find($id, Auth::businessId());
+
+    if (!$contact) {
+        Flash::error('Kontak tidak ditemukan.');
+        Response::redirect('/?page=contacts');
+    }
+
+    View::render('contact-ledger', [
+        'title' => 'Buku Besar Kontak',
+        'contact' => $contact,
+        'ledger' => $contactRepository->getLedger($id, Auth::businessId())
+    ]);
+    exit;
+}
+
+if ($page === 'contacts/pay' && $method === 'POST') {
+    $requireAuth();
+    $requireCsrf('contacts/ledger');
+
+    try {
+        $transactionId = (int) $_POST['transaction_id'];
+        $amountCents = (int) ($_POST['amount'] * 100);
+
+        $pdo->beginTransaction();
+
+        $stmtTx = $pdo->prepare('SELECT payment_status FROM transactions WHERE id = :id AND business_id = :business_id');
+        $stmtTx->execute([':id' => $transactionId, ':business_id' => Auth::businessId()]);
+        $tx = $stmtTx->fetch();
+
+        if (!$tx) throw new Exception('Transaksi tidak valid.');
+
+        $stmtPayment = $pdo->prepare('INSERT INTO transaction_payments (transaction_id, amount_cents, payment_method, created_by) VALUES (:tx_id, :amount, :method, :created_by)');
+        $stmtPayment->execute([
+            ':tx_id' => $transactionId,
+            ':amount' => $amountCents,
+            ':method' => 'cash',
+            ':created_by' => Auth::id()
+        ]);
+
+        $stmtCheck = $pdo->prepare('SELECT total_cents, COALESCE(SUM(tp.amount_cents),0) as paid FROM transactions t LEFT JOIN transaction_payments tp ON t.id = tp.transaction_id WHERE t.id = :id GROUP BY t.id');
+        $stmtCheck->execute([':id' => $transactionId]);
+        $check = $stmtCheck->fetch();
+
+        $status = 'due';
+        if ($check['paid'] >= $check['total_cents']) $status = 'paid';
+        elseif ($check['paid'] > 0) $status = 'partial';
+
+        $stmtUpdate = $pdo->prepare('UPDATE transactions SET payment_status = :status WHERE id = :id');
+        $stmtUpdate->execute([':status' => $status, ':id' => $transactionId]);
+
+        $pdo->commit();
+        Flash::success('Pembayaran dicatat.');
+    } catch (\Exception $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        Flash::error('Gagal mencatat pembayaran: ' . $e->getMessage());
+    }
+
+    Response::redirect('/?page=contacts/ledger&id=' . (int)$_POST['contact_id']);
+}
+
 if ($page === 'expenses' && $method === 'GET') {
     $requireAuth();
     if (!Auth::hasAnyRole('admin', 'manager')) {
@@ -678,6 +750,175 @@ if ($page === 'accounts/transfer' && $method === 'POST') {
     }
 
     Response::redirect('/?page=accounts');
+}
+
+if ($page === 'tables' && $method === 'GET') {
+    $requireAuth();
+    if (!Auth::hasAnyRole('admin', 'manager')) {
+        Flash::error('Hanya Admin/Manager yang dapat mengakses Meja.');
+        Response::redirect('/?page=dashboard');
+    }
+    View::render('tables', [
+        'title' => 'Manajemen Meja',
+        'tables' => $tableRepository->all(Auth::businessId())
+    ]);
+    exit;
+}
+
+if ($page === 'tables/store' && $method === 'POST') {
+    $requireAuth();
+    $requireCsrf('tables');
+    if (!Auth::hasAnyRole('admin', 'manager')) {
+        Flash::error('Akses ditolak.');
+        Response::redirect('/?page=dashboard');
+    }
+
+    try {
+        $tableRepository->create(Auth::businessId(), $_POST['name'] ?? '', empty($_POST['description']) ? null : $_POST['description']);
+        Flash::success('Meja berhasil ditambahkan.');
+    } catch (\Exception $e) {
+        Flash::error('Gagal menambahkan meja.');
+    }
+    Response::redirect('/?page=tables');
+}
+
+if ($page === 'pos/z-report' && $method === 'GET') {
+    $requireAuth();
+    $registerId = (int) ($_GET['id'] ?? 0);
+    $reportData = $cashRegisterRepository->getZReportData(Auth::businessId(), $registerId);
+
+    View::render('z-report', [
+        'title' => 'Laporan Shift (Z-Report)',
+        'reportData' => $reportData
+    ]);
+    exit;
+}
+
+if ($page === 'sells/suspended' && $method === 'GET') {
+    $requireAuth();
+    $stmt = $pdo->prepare('
+        SELECT t.*, c.name as contact_name
+        FROM transactions t
+        LEFT JOIN contacts c ON t.contact_id = c.id
+        WHERE t.business_id = :business_id AND t.type = \'sell\' AND t.status IN (\'draft\', \'suspended\')
+        ORDER BY t.created_at DESC
+    ');
+    $stmt->execute([':business_id' => Auth::businessId()]);
+
+    View::render('suspended-sells', [
+        'title' => 'Transaksi Tertunda',
+        'suspended' => $stmt->fetchAll()
+    ]);
+    exit;
+}
+
+if ($page === 'sells/delete' && $method === 'POST') {
+    $requireAuth();
+    $requireCsrf('sells/suspended');
+
+    try {
+        $stmt = $pdo->prepare('DELETE FROM transactions WHERE id = :id AND business_id = :business_id AND status IN (\'draft\', \'suspended\')');
+        $stmt->execute([
+            ':id' => (int) $_POST['transaction_id'],
+            ':business_id' => Auth::businessId()
+        ]);
+        Flash::success('Transaksi berhasil dihapus.');
+    } catch (\Exception $e) {
+        Flash::error('Gagal menghapus transaksi.');
+    }
+    Response::redirect('/?page=sells/suspended');
+}
+
+if ($page === 'sells/resume' && $method === 'POST') {
+    $requireAuth();
+    $requireCsrf('sells/suspended');
+
+    try {
+        $transactionId = (int) $_POST['transaction_id'];
+
+        $stmtVerify = $pdo->prepare('SELECT id FROM transactions WHERE id = :id AND business_id = :business_id AND status IN (\'draft\', \'suspended\') LIMIT 1');
+        $stmtVerify->execute([':id' => $transactionId, ':business_id' => Auth::businessId()]);
+        if (!$stmtVerify->fetch()) {
+            throw new \Exception('Transaksi tidak valid atau sudah diselesaikan.');
+        }
+
+        $stmtLines = $pdo->prepare('SELECT * FROM transaction_sell_lines WHERE transaction_id = :id');
+        $stmtLines->execute([':id' => $transactionId]);
+        $lines = $stmtLines->fetchAll();
+
+        $stmtPurchaseLines = $pdo->prepare(
+            'SELECT pl.id, pl.qty, pl.qty_sold FROM purchase_lines pl
+             JOIN transactions t ON pl.transaction_id = t.id
+             WHERE t.business_id = :business_id AND pl.product_id = :product_id AND (pl.variation_id = :variation_id OR (pl.variation_id IS NULL AND :variation_id IS NULL))
+               AND pl.qty > pl.qty_sold
+               AND t.status IN (\'received\', \'final\')
+             ORDER BY pl.created_at ASC'
+        );
+        $stmtUpdatePurchaseLine = $pdo->prepare(
+            'UPDATE purchase_lines SET qty_sold = qty_sold + :qty_sold WHERE id = :id'
+        );
+        $stmtMapping = $pdo->prepare(
+            'INSERT INTO transaction_sell_lines_purchase_lines (sell_line_id, purchase_line_id, qty) VALUES (:sell_line_id, :purchase_line_id, :qty)'
+        );
+
+        $pdo->beginTransaction();
+
+        foreach ($lines as $line) {
+            $productRepository->decrementStock((int)$line['product_id'], (float)$line['qty'], Auth::businessId(), empty($line['variation_id']) ? null : (int)$line['variation_id']);
+
+            $stmtPurchaseLines->execute([
+                ':business_id' => Auth::businessId(),
+                ':product_id' => $line['product_id'],
+                ':variation_id' => $line['variation_id']
+            ]);
+            $availableLots = $stmtPurchaseLines->fetchAll();
+
+            $qtyToDeduct = (float) $line['qty'];
+
+            foreach ($availableLots as $lot) {
+                if ($qtyToDeduct <= 0) break;
+
+                $availableQtyInLot = (float) $lot['qty'] - (float) $lot['qty_sold'];
+                $deductedFromLot = min($qtyToDeduct, $availableQtyInLot);
+
+                $stmtUpdatePurchaseLine->execute([
+                    ':qty_sold' => $deductedFromLot,
+                    ':id' => $lot['id']
+                ]);
+
+                $stmtMapping->execute([
+                    ':sell_line_id' => $line['id'],
+                    ':purchase_line_id' => $lot['id'],
+                    ':qty' => $deductedFromLot
+                ]);
+
+                $qtyToDeduct -= $deductedFromLot;
+            }
+        }
+
+        $stmt = $pdo->prepare("UPDATE transactions SET status = 'checked_out', payment_status = 'due' WHERE id = :id AND business_id = :business_id");
+        $stmt->execute([
+            ':id' => $transactionId,
+            ':business_id' => Auth::businessId()
+        ]);
+
+        $pdo->commit();
+
+        $stmtContact = $pdo->prepare('SELECT contact_id FROM transactions WHERE id = :id');
+        $stmtContact->execute([':id' => $transactionId]);
+        $contactId = $stmtContact->fetchColumn();
+
+        if ($contactId) {
+            Flash::success('Transaksi diselesaikan (Belum Lunas). Silakan catat pembayaran.');
+            Response::redirect('/?page=contacts/ledger&id=' . $contactId);
+        }
+
+        Flash::success('Transaksi berhasil diselesaikan.');
+    } catch (\Exception $e) {
+        if ($pdo->inTransaction()) { $pdo->rollBack(); }
+        Flash::error('Gagal memproses transaksi: ' . $e->getMessage());
+    }
+    Response::redirect('/?page=sells/suspended');
 }
 
 if ($page === 'categories' && $method === 'GET') {

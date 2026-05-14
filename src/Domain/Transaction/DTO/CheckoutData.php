@@ -21,6 +21,9 @@ final class CheckoutData
         public readonly ?int $contactId = null,
         public readonly string $type = 'sell',
         public readonly ?int $cashRegisterId = null,
+        public readonly string $status = 'checked_out',
+        public readonly ?int $commissionAgentId = null,
+        public readonly ?int $resTableId = null,
     ) {
         if ($this->items === []) {
             throw new InvalidArgumentException('Keranjang masih kosong.');
@@ -62,6 +65,9 @@ final class CheckoutData
         $cashRaw = (string) ($payload['cash_received'] ?? '0');
         $contactId = isset($payload['contact_id']) && is_numeric($payload['contact_id']) ? (int) $payload['contact_id'] : null;
         $type = (string) ($payload['type'] ?? 'sell');
+        $status = (string) ($payload['status'] ?? 'checked_out');
+        $commissionAgentId = isset($payload['commission_agent_id']) && is_numeric($payload['commission_agent_id']) ? (int) $payload['commission_agent_id'] : null;
+        $resTableId = isset($payload['res_table_id']) && is_numeric($payload['res_table_id']) ? (int) $payload['res_table_id'] : null;
 
         $discountValue = self::normalizeDecimal($discountRaw);
         $cashReceivedCents = Money::toCents($cashRaw);
@@ -78,6 +84,9 @@ final class CheckoutData
             contactId: $contactId,
             type: $type,
             cashRegisterId: $cashRegisterId,
+            status: $status,
+            commissionAgentId: $commissionAgentId,
+            resTableId: $resTableId,
         );
     }
 

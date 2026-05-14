@@ -92,9 +92,12 @@ final class AdjustStockAction
                 // Maintain FIFO Integrity for Subtractions
                 if ($line['type'] === 'subtract') {
                     $stmtPurchaseLines = $this->pdo->prepare(
-                        'SELECT id, qty, qty_sold FROM purchase_lines
-                         WHERE product_id = :product_id AND (variation_id = :variation_id OR (variation_id IS NULL AND :variation_id IS NULL)) AND qty > qty_sold
-                         ORDER BY created_at ASC'
+                        'SELECT pl.id, pl.qty, pl.qty_sold FROM purchase_lines pl
+                         JOIN transactions t ON pl.transaction_id = t.id
+                         WHERE t.business_id = :business_id AND pl.product_id = :product_id AND (pl.variation_id = :variation_id OR (pl.variation_id IS NULL AND :variation_id IS NULL))
+                           AND pl.qty > pl.qty_sold
+                           AND t.status IN (\'received\', \'final\')
+                         ORDER BY pl.created_at ASC'
                     );
                     $stmtUpdatePurchaseLine = $this->pdo->prepare(
                         'UPDATE purchase_lines SET qty_sold = qty_sold + :qty_sold WHERE id = :id'
@@ -108,6 +111,7 @@ final class AdjustStockAction
                     );
 
                     $stmtPurchaseLines->execute([
+                        ':business_id' => $businessId,
                         ':product_id' => $line['product_id'],
                         ':variation_id' => $line['variation_id']
                     ]);

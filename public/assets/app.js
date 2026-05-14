@@ -220,51 +220,75 @@
             }
         });
 
-        var btnCheckout = document.getElementById('btn-checkout');
-        if (btnCheckout) {
-            btnCheckout.addEventListener('click', function() {
-                if (cartItems.length === 0) {
-                    alert('Keranjang kosong.');
-                    return;
-                }
+        function submitCheckout(status) {
+            if (cartItems.length === 0) {
+                alert('Keranjang kosong.');
+                return;
+            }
 
+            var btnCheckout = document.getElementById('btn-checkout');
+            if (btnCheckout) {
                 btnCheckout.disabled = true;
                 btnCheckout.textContent = 'Memproses...';
+            }
 
-                var payload = {
-                    items: cartItems.map(i => ({ product_id: i.product_id, variation_id: i.variation_id, qty: i.qty })),
-                    discount_type: document.getElementById('discount-type').value,
-                    discount_value: document.getElementById('discount-value').value,
-                    payment_method: document.getElementById('payment-method').value,
-                    cash_received: document.getElementById('cash-received').value,
-                    _csrf: document.getElementById('csrf-token').value
-                };
+            var commissionAgentElement = document.getElementById('commission-agent');
+            var resTableElement = document.getElementById('res-table');
 
-                fetch('/?page=api/checkout', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(payload)
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        alert('Error: ' + data.error);
+            var payload = {
+                items: cartItems.map(i => ({ product_id: i.product_id, variation_id: i.variation_id, qty: i.qty })),
+                discount_type: document.getElementById('discount-type').value,
+                discount_value: document.getElementById('discount-value').value,
+                payment_method: document.getElementById('payment-method').value,
+                cash_received: document.getElementById('cash-received').value,
+                status: status,
+                commission_agent_id: commissionAgentElement ? commissionAgentElement.value : null,
+                res_table_id: resTableElement ? resTableElement.value : null,
+                _csrf: document.getElementById('csrf-token').value
+            };
+
+            fetch('/?page=api/checkout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    if (btnCheckout) {
                         btnCheckout.disabled = false;
                         btnCheckout.textContent = 'Bayar / Checkout';
-                    } else if (data.success) {
-                        alert('Transaksi Berhasil! Nomor: ' + data.transaction_number);
-                        window.location.reload();
                     }
-                })
-                .catch(err => {
-                    console.error(err);
-                    alert('Terjadi kesalahan jaringan.');
+                } else if (data.success) {
+                    alert('Berhasil! Nomor Transaksi: ' + data.transaction_number);
+                    window.location.reload();
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert('Terjadi kesalahan jaringan.');
+                if (btnCheckout) {
                     btnCheckout.disabled = false;
                     btnCheckout.textContent = 'Bayar / Checkout';
-                });
+                }
             });
+        }
+
+        var btnCheckout = document.getElementById('btn-checkout');
+        var btnDraft = document.getElementById('btn-draft');
+        var btnSuspend = document.getElementById('btn-suspend');
+
+        if (btnCheckout) {
+            btnCheckout.addEventListener('click', function() { submitCheckout('checked_out'); });
+        }
+
+        if (btnDraft) {
+            btnDraft.addEventListener('click', function() { submitCheckout('draft'); });
+        }
+
+        if (btnSuspend) {
+            btnSuspend.addEventListener('click', function() { submitCheckout('suspended'); });
         }
     }
 

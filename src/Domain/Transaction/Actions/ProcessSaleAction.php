@@ -70,16 +70,23 @@ final class ProcessSaleAction
             // 3. Buat transaksi utama
             $transactionNumber = 'TRX-' . date('YmdHis') . '-' . random_int(100, 999);
 
+            $paymentStatus = 'paid';
+            if ($data->cashReceivedCents < $totalCents) {
+                $paymentStatus = $data->cashReceivedCents > 0 ? 'partial' : 'due';
+            }
+
             $stmt = $this->pdo->prepare(
                 'INSERT INTO transactions (
                     business_id, cash_register_id, transaction_number, type, status, contact_id,
+                    commission_agent_id, res_table_id,
                     subtotal_cents, discount_type, discount_value, discount_cents,
-                    tax_rate, tax_cents, total_cents, payment_method,
+                    tax_rate, tax_cents, total_cents, payment_status, payment_method,
                     cash_received_cents, change_cents, created_by
                 ) VALUES (
                     :business_id, :cash_register_id, :transaction_number, :type, :status, :contact_id,
+                    :commission_agent_id, :res_table_id,
                     :subtotal_cents, :discount_type, :discount_value, :discount_cents,
-                    :tax_rate, :tax_cents, :total_cents, :payment_method,
+                    :tax_rate, :tax_cents, :total_cents, :payment_status, :payment_method,
                     :cash_received_cents, :change_cents, :created_by
                 )'
             );
@@ -89,8 +96,10 @@ final class ProcessSaleAction
                 ':cash_register_id' => $data->cashRegisterId,
                 ':transaction_number' => $transactionNumber,
                 ':type' => $data->type,
-                ':status' => 'checked_out',
+                ':status' => $data->status,
                 ':contact_id' => $data->contactId,
+                ':commission_agent_id' => $data->commissionAgentId,
+                ':res_table_id' => $data->resTableId,
                 ':subtotal_cents' => $subtotalCents,
                 ':discount_type' => $data->discountType,
                 ':discount_value' => $data->discountValue,
@@ -98,6 +107,7 @@ final class ProcessSaleAction
                 ':tax_rate' => $data->taxRate,
                 ':tax_cents' => $taxCents,
                 ':total_cents' => $totalCents,
+                ':payment_status' => $paymentStatus,
                 ':payment_method' => $data->paymentMethod,
                 ':cash_received_cents' => $data->cashReceivedCents,
                 ':change_cents' => $changeCents,
@@ -105,6 +115,19 @@ final class ProcessSaleAction
             ]);
 
             $transactionId = (int) $this->pdo->lastInsertId();
+
+            if ($data->cashReceivedCents > 0) {
+                $stmtPayment = $this->pdo->prepare(
+                    'INSERT INTO transaction_payments (transaction_id, amount_cents, payment_method, created_by)
+                     VALUES (:transaction_id, :amount_cents, :payment_method, :created_by)'
+                );
+                $stmtPayment->execute([
+                    ':transaction_id' => $transactionId,
+                    ':amount_cents' => min($data->cashReceivedCents, $totalCents),
+                    ':payment_method' => $data->paymentMethod,
+                    ':created_by' => $data->actorUserId,
+                ]);
+            }
 
             // 4. Masukkan line items dan implementasi FIFO Stock Deduction
             $stmtLine = $this->pdo->prepare(
@@ -116,9 +139,12 @@ final class ProcessSaleAction
             );
 
             $stmtPurchaseLines = $this->pdo->prepare(
-                'SELECT id, qty, qty_sold FROM purchase_lines
-                 WHERE product_id = :product_id AND (variation_id = :variation_id OR (variation_id IS NULL AND :variation_id IS NULL)) AND qty > qty_sold
-                 ORDER BY created_at ASC'
+                'SELECT pl.id, pl.qty, pl.qty_sold FROM purchase_lines pl
+                 JOIN transactions t ON pl.transaction_id = t.id
+                 WHERE t.business_id = :business_id AND pl.product_id = :product_id AND (pl.variation_id = :variation_id OR (pl.variation_id IS NULL AND :variation_id IS NULL))
+                   AND pl.qty > pl.qty_sold
+                   AND t.status IN (\'received\', \'final\')
+                 ORDER BY pl.created_at ASC'
             );
 
             $stmtUpdatePurchaseLine = $this->pdo->prepare(
@@ -146,11 +172,14 @@ final class ProcessSaleAction
                 ]);
                 $sellLineId = (int) $this->pdo->lastInsertId();
 
-                // Deduct master stock
-                $this->products->decrementStock($line['product_id'], $line['qty'], $data->businessId, $line['variation_id']);
+                // Hanya kurangi stok jika status checkout final/checked_out (bukan draft/suspended)
+                if (in_array($data->status, ['checked_out', 'final'])) {
+                    // Deduct master stock
+                    $this->products->decrementStock($line['product_id'], $line['qty'], $data->businessId, $line['variation_id']);
 
-                // FIFO Logic: Fetch available purchase lines
+                    // FIFO Logic: Fetch available purchase lines
                 $stmtPurchaseLines->execute([
+                    ':business_id' => $data->businessId,
                     ':product_id' => $line['product_id'],
                     ':variation_id' => $line['variation_id']
                 ]);
@@ -179,6 +208,7 @@ final class ProcessSaleAction
 
                     $qtyToDeduct -= $deductedFromLot;
                 }
+            } // End if status == checked_out/final
             }
 
             $this->pdo->commit();

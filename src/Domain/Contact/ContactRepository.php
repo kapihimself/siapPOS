@@ -45,4 +45,31 @@ final class ContactRepository
             ':address' => $address,
         ]);
     }
+
+    public function find(int $id, int $businessId): ?array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM contacts WHERE id = :id AND business_id = :business_id');
+        $stmt->execute([':id' => $id, ':business_id' => $businessId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row !== false ? $row : null;
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    public function getLedger(int $contactId, int $businessId): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT t.id, t.transaction_number, t.type, t.status, t.payment_status, t.total_cents, t.created_at,
+                   COALESCE(SUM(tp.amount_cents), 0) as paid_cents
+            FROM transactions t
+            LEFT JOIN transaction_payments tp ON t.id = tp.transaction_id
+            WHERE t.contact_id = :contact_id AND t.business_id = :business_id
+            GROUP BY t.id
+            ORDER BY t.created_at DESC
+        ");
+        $stmt->execute([
+            ':contact_id' => $contactId,
+            ':business_id' => $businessId
+        ]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 }

@@ -49,4 +49,12 @@ final class UserRepository
         $stmt->execute([':business_id' => $businessId]);
         return (int) $stmt->fetchColumn();
     }
+
+    /** @return array<int, array<string, mixed>> */
+    public function getCommissionAgents(int $businessId): array
+    {
+        $stmt = $this->pdo->prepare("SELECT id, username, full_name, role FROM users WHERE business_id = :business_id AND role IN ('admin', 'manager', 'cashier') ORDER BY full_name ASC");
+        $stmt->execute([':business_id' => $businessId]);
+        return $stmt->fetchAll();
+    }
 }

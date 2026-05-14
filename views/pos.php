@@ -9,7 +9,10 @@ use Siappos\Shared\Csrf;
         <div class="panel">
             <div class="progress-header" style="display: flex; justify-content: space-between; align-items: center;">
                 <h3 style="margin: 0;">Terminal POS</h3>
-                <button type="button" class="btn btn-danger" onclick="document.getElementById('close-register-modal').style.display='block'">Tutup Shift Kasir</button>
+                <div>
+                    <a href="/?page=sells/suspended" class="btn" style="background: #e67e22; color: #fff;">Lihat Suspended / Draft</a>
+                    <button type="button" class="btn btn-danger" onclick="document.getElementById('close-register-modal').style.display='block'">Tutup Shift Kasir</button>
+                </div>
             </div>
             <div>
                 <input type="text" id="product-search" placeholder="Cari Produk (Nama / SKU)" autocomplete="off">
@@ -85,8 +88,36 @@ use Siappos\Shared\Csrf;
                 <span id="cart-change">Rp 0</span>
             </div>
 
+            <?php if (!empty($agents)): ?>
+            <div style="margin-bottom: 15px;">
+                <label for="commission-agent">Agen Komisi</label>
+                <select id="commission-agent" style="width: 100%;">
+                    <option value="">-- Pilih Agen (Opsional) --</option>
+                    <?php foreach ($agents as $agent): ?>
+                        <option value="<?= $agent['id'] ?>"><?= htmlspecialchars($agent['full_name']) ?> (<?= (float) $agent['commission_percent'] ?>%)</option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <?php endif; ?>
+
+            <?php if (!empty($tables)): ?>
+            <div style="margin-bottom: 15px;">
+                <label for="res-table">Pilih Meja (Dine-in)</label>
+                <select id="res-table" style="width: 100%;">
+                    <option value="">-- Take Away / Umum --</option>
+                    <?php foreach ($tables as $table): ?>
+                        <option value="<?= $table['id'] ?>"><?= htmlspecialchars($table['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <?php endif; ?>
+
             <input type="hidden" id="csrf-token" value="<?= htmlspecialchars(Csrf::token()) ?>">
-            <button type="button" id="btn-checkout" class="btn btn-primary" style="width: 100%; font-size: 18px; padding: 12px;">Bayar / Checkout</button>
+            <button type="button" id="btn-checkout" class="btn btn-primary" style="width: 100%; font-size: 18px; padding: 12px; margin-bottom: 10px;">Bayar / Checkout</button>
+            <div style="display: flex; gap: 10px;">
+                <button type="button" id="btn-draft" class="btn" style="flex: 1; background-color: #f1c40f; color: #fff;">Simpan Draft</button>
+                <button type="button" id="btn-suspend" class="btn" style="flex: 1; background-color: #e67e22; color: #fff;">Suspend (Tahan)</button>
+            </div>
         </div>
     </div>
 </div>

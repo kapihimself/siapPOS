@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
     username TEXT NOT NULL UNIQUE,
     full_name TEXT NOT NULL,
     role TEXT NOT NULL CHECK (role IN ('admin', 'manager', 'cashier')),
+    commission_percent REAL NOT NULL DEFAULT 0 CHECK (commission_percent >= 0 AND commission_percent <= 100),
     pin_hash TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE
@@ -124,8 +125,10 @@ CREATE TABLE IF NOT EXISTS transactions (
     cash_register_id INTEGER,
     transaction_number TEXT NOT NULL UNIQUE,
     type TEXT NOT NULL CHECK (type IN ('sell', 'purchase', 'stock_adjustment', 'opening_stock', 'sell_return', 'opening_balance', 'expense')),
-    status TEXT NOT NULL CHECK (status IN ('draft', 'checked_out', 'cancelled', 'received', 'pending', 'ordered', 'final', 'quotation', 'proforma')),
+    status TEXT NOT NULL CHECK (status IN ('draft', 'suspended', 'checked_out', 'cancelled', 'received', 'pending', 'ordered', 'final', 'quotation', 'proforma')),
     contact_id INTEGER,
+    commission_agent_id INTEGER,
+    res_table_id INTEGER,
     subtotal_cents INTEGER NOT NULL,
     discount_type TEXT NOT NULL CHECK (discount_type IN ('none', 'percent', 'fixed')),
     discount_value REAL NOT NULL DEFAULT 0,
@@ -133,6 +136,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     tax_rate REAL NOT NULL DEFAULT 10,
     tax_cents INTEGER NOT NULL DEFAULT 0,
     total_cents INTEGER NOT NULL,
+    payment_status TEXT NOT NULL DEFAULT 'paid' CHECK (payment_status IN ('paid', 'due', 'partial')),
     payment_method TEXT NOT NULL CHECK (payment_method IN ('cash', 'qris', 'bank_transfer', 'custom')),
     cash_received_cents INTEGER,
     change_cents INTEGER NOT NULL DEFAULT 0,
@@ -141,7 +145,9 @@ CREATE TABLE IF NOT EXISTS transactions (
     FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE,
     FOREIGN KEY (cash_register_id) REFERENCES cash_registers(id) ON DELETE SET NULL,
     FOREIGN KEY (contact_id) REFERENCES contacts(id),
-    FOREIGN KEY (created_by) REFERENCES users(id)
+    FOREIGN KEY (created_by) REFERENCES users(id),
+    FOREIGN KEY (commission_agent_id) REFERENCES users(id),
+    FOREIGN KEY (res_table_id) REFERENCES res_tables(id)
 );
 
 CREATE TABLE IF NOT EXISTS transaction_sell_lines (
@@ -232,3 +238,61 @@ CREATE TABLE IF NOT EXISTS account_transactions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_account_transactions_account_id ON account_transactions(account_id);
+
+
+CREATE TABLE IF NOT EXISTS transaction_payments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    transaction_id INTEGER NOT NULL,
+    amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+    payment_status TEXT NOT NULL DEFAULT 'paid' CHECK (payment_status IN ('paid', 'due', 'partial')),
+    payment_method TEXT NOT NULL CHECK (payment_method IN ('cash', 'qris', 'bank_transfer', 'custom')),
+    paid_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by INTEGER NOT NULL,
+    FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS res_tables (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS res_modifier_sets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS res_modifiers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    modifier_set_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    price_cents INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (modifier_set_id) REFERENCES res_modifier_sets(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS res_product_modifier_sets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id INTEGER NOT NULL,
+    modifier_set_id INTEGER NOT NULL,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+    FOREIGN KEY (modifier_set_id) REFERENCES res_modifier_sets(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS transaction_sell_line_modifiers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sell_line_id INTEGER NOT NULL,
+    modifier_id INTEGER NOT NULL,
+    modifier_name TEXT NOT NULL,
+    modifier_price_cents INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (sell_line_id) REFERENCES transaction_sell_lines(id) ON DELETE CASCADE,
+    FOREIGN KEY (modifier_id) REFERENCES res_modifiers(id)
+);
