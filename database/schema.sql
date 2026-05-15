@@ -140,6 +140,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     payment_method TEXT NOT NULL CHECK (payment_method IN ('cash', 'qris', 'bank_transfer', 'custom')),
     cash_received_cents INTEGER,
     change_cents INTEGER NOT NULL DEFAULT 0,
+    payment_token TEXT,
     created_by INTEGER NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE,
@@ -295,4 +296,11 @@ CREATE TABLE IF NOT EXISTS transaction_sell_line_modifiers (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (sell_line_id) REFERENCES transaction_sell_lines(id) ON DELETE CASCADE,
     FOREIGN KEY (modifier_id) REFERENCES res_modifiers(id)
+);
+
+CREATE TABLE IF NOT EXISTS jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    payload TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

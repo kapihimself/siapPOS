@@ -7,10 +7,12 @@ use InvalidArgumentException;
 
 final class CartItemData
 {
+    /** @param list<array{id: int, name: string, price_cents: int}> $modifiers */
     public function __construct(
         public readonly int $productId,
         public readonly float $qty,
         public readonly ?int $variationId = null,
+        public readonly array $modifiers = [],
     ) {
         if ($this->productId <= 0) {
             throw new InvalidArgumentException('Produk tidak valid di cart.');

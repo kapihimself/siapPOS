@@ -28,7 +28,9 @@ use Siappos\Domain\Transaction\DTO\PurchaseLineData;
 use Siappos\Shared\Csrf;
 use Siappos\Shared\Flash;
 use Siappos\Shared\EventBus;
+use Siappos\Shared\QueueManager;
 use Siappos\Domain\Restaurant\TableRepository;
+use Siappos\Domain\Restaurant\ResModifierRepository;
 use Siappos\Domain\Contact\ContactRepository;
 use Siappos\Domain\Accounting\Actions\RecordExpenseAction;
 
@@ -40,11 +42,13 @@ session_start();
 require_once dirname(__DIR__) . '/src/bootstrap.php';
 
 $eventBus = new EventBus();
+$queueManager = new QueueManager($pdo);
 $userRepository = new UserRepository($pdo);
 $cashRegisterRepository = new CashRegisterRepository($pdo);
 $accountRepository = new AccountRepository($pdo);
 $reportRepository = new ReportRepository($pdo);
 $tableRepository = new TableRepository($pdo);
+$resModifierRepository = new ResModifierRepository($pdo);
 $contactRepository = new ContactRepository($pdo);
 $categoryRepository = new CategoryRepository($pdo);
 $brandRepository = new BrandRepository($pdo);
@@ -321,7 +325,7 @@ if ($page === 'api/checkout' && $method === 'POST') {
             (int) $activeRegister['id']
         );
 
-        $processSale = new ProcessSaleAction($pdo, $productRepository, $eventBus);
+        $processSale = new ProcessSaleAction($pdo, $productRepository, $eventBus, clone $queueManager);
         $transaction = $processSale->execute($data);
 
         echo json_encode(['success' => true, 'transaction_number' => $transaction['transaction_number']]);
@@ -780,6 +784,111 @@ if ($page === 'tables/store' && $method === 'POST') {
         Flash::error('Gagal menambahkan meja.');
     }
     Response::redirect('/?page=tables');
+}
+
+if ($page === 'modifiers' && $method === 'GET') {
+    $requireAuth();
+    if (!Auth::hasAnyRole('admin', 'manager')) {
+        Flash::error('Akses ditolak.');
+        Response::redirect('/?page=dashboard');
+    }
+    View::render('modifiers', [
+        'title' => 'Manajemen Modifier',
+        'sets' => $resModifierRepository->getSets(Auth::businessId()),
+        'modifierRepo' => $resModifierRepository
+    ]);
+    exit;
+}
+
+if ($page === 'modifiers/set-store' && $method === 'POST') {
+    $requireAuth();
+    $requireCsrf('modifiers');
+    try {
+        $resModifierRepository->createSet(Auth::businessId(), $_POST['name']);
+        Flash::success('Grup modifier ditambahkan.');
+    } catch (\Exception $e) {
+        Flash::error('Gagal menambah grup.');
+    }
+    Response::redirect('/?page=modifiers');
+}
+
+if ($page === 'modifiers/item-store' && $method === 'POST') {
+    $requireAuth();
+    $requireCsrf('modifiers');
+    try {
+        $resModifierRepository->createModifier((int)$_POST['set_id'], $_POST['name'], (int)($_POST['price'] * 100));
+        Flash::success('Opsi modifier ditambahkan.');
+    } catch (\Exception $e) {
+        Flash::error('Gagal menambah opsi.');
+    }
+    Response::redirect('/?page=modifiers');
+}
+
+if ($page === 'invoice' && $method === 'GET') {
+    $token = $_GET['token'] ?? '';
+    if (!$token) {
+        http_response_code(404);
+        echo "Invoice tidak ditemukan.";
+        exit;
+    }
+
+    $stmt = $pdo->prepare('SELECT * FROM transactions WHERE payment_token = :token LIMIT 1');
+    $stmt->execute([':token' => $token]);
+    $transaction = $stmt->fetch();
+
+    if (!$transaction) {
+        http_response_code(404);
+        echo "Invoice tidak valid.";
+        exit;
+    }
+
+    // Pass an empty token to Csrf::verify/token if session isn't strictly needed for public,
+    // but session_start is active globally in index.php so Csrf::token() works.
+    View::render('public-invoice', [
+        'title' => 'Tagihan #' . $transaction['transaction_number'],
+        'transaction' => $transaction
+    ]);
+    exit;
+}
+
+if ($page === 'api/pay-invoice' && $method === 'POST') {
+    $token = $_POST['token'] ?? '';
+    if (!Csrf::verify($_POST['_csrf'] ?? null) || !$token) {
+        http_response_code(400);
+        echo "Permintaan tidak valid.";
+        exit;
+    }
+
+    $stmt = $pdo->prepare('SELECT id, total_cents, payment_status FROM transactions WHERE payment_token = :token LIMIT 1');
+    $stmt->execute([':token' => $token]);
+    $transaction = $stmt->fetch();
+
+    if (!$transaction || $transaction['payment_status'] === 'paid') {
+        Flash::error('Tagihan sudah lunas atau tidak valid.');
+        Response::redirect('/?page=invoice&token=' . $token);
+    }
+
+    // Mock successful payment
+    $pdo->beginTransaction();
+    try {
+        $stmtUpdate = $pdo->prepare('UPDATE transactions SET payment_status = \'paid\', cash_received_cents = total_cents WHERE id = :id');
+        $stmtUpdate->execute([':id' => $transaction['id']]);
+
+        // Create payment record
+        $stmtPay = $pdo->prepare('INSERT INTO transaction_payments (transaction_id, amount_cents, payment_method, created_by) VALUES (:tx_id, :amount, \'custom\', 0)');
+        $stmtPay->execute([
+            ':tx_id' => $transaction['id'],
+            ':amount' => $transaction['total_cents']
+        ]);
+
+        $pdo->commit();
+        Flash::success('Pembayaran online (MOCK) berhasil diproses. Terima kasih!');
+    } catch (\Exception $e) {
+        $pdo->rollBack();
+        Flash::error('Terjadi kesalahan pada gateway pembayaran.');
+    }
+
+    Response::redirect('/?page=invoice&token=' . $token);
 }
 
 if ($page === 'pos/z-report' && $method === 'GET') {
