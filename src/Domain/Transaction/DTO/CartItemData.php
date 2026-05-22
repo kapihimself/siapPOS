@@ -7,7 +7,6 @@ use InvalidArgumentException;
 
 final class CartItemData
 {
-    /** @param list<array{id: int, name: string, price_cents: int}> $modifiers */
     public function __construct(
         public readonly int $productId,
         public readonly float $qty,

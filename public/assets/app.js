@@ -136,12 +136,18 @@
                 });
             }
             renderCart();
-        };
+        }
+
+
+;
 
         window.posRemoveFromCart = function(productId, variationId) {
             cartItems = cartItems.filter(item => !(item.product_id === productId && item.variation_id === variationId));
             renderCart();
-        };
+        }
+
+
+;
 
         window.posUpdateQty = function(productId, variationId, qty) {
             var item = cartItems.find(i => i.product_id === productId && i.variation_id === variationId);
@@ -300,3 +306,53 @@
         initPOS();
     });
 })();
+
+        function showModifierModal(id, varId, name, price, modifierSets) {
+            let html = '<form id="modifier-form">';
+            modifierSets.forEach(set => {
+                html += '<div class="mb-3"><h6>' + set.set_name + '</h6>';
+                set.modifiers.forEach(mod => {
+                    let priceText = mod.price_cents > 0 ? ' (+' + formatCurrency(mod.price_cents) + ')' : '';
+                    html += '<div class="form-check">';
+                    html += '<input class="form-check-input" type="checkbox" name="modifiers[]" value="' + mod.id + '" id="mod_' + mod.id + '" data-price="' + mod.price_cents + '">';
+                    html += '<label class="form-check-label" for="mod_' + mod.id + '">' + mod.name + priceText + '</label>';
+                    html += '</div>';
+                });
+                html += '</div>';
+            });
+            html += '</form>';
+
+            $('#genericModalTitle').text('Pilih Modifier untuk ' + name);
+            $('#genericModalBody').html(html);
+            $('#genericModalFooter').html('<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button><button type="button" class="btn btn-primary" id="btn-add-with-modifiers">Tambahkan</button>');
+
+            $('#btn-add-with-modifiers').click(function() {
+                let selectedMods = [];
+                let extraPrice = 0;
+                $('#modifier-form input[name="modifiers[]"]:checked').each(function() {
+                    selectedMods.push(parseInt($(this).val()));
+                    extraPrice += parseInt($(this).data('price'));
+                });
+                addToCartFinal(id, varId, name, price + extraPrice, selectedMods);
+                $('#genericModal').modal('hide');
+            });
+
+            $('#genericModal').modal('show');
+        }
+
+        function addToCartFinal(id, varId, name, price, modifiers) {
+            let cartItem = cartItems.find(i => i.product_id == id && i.variation_id == varId && JSON.stringify(i.modifiers) === JSON.stringify(modifiers));
+            if (cartItem) {
+                cartItem.qty += 1;
+            } else {
+                cartItems.push({
+                    product_id: id,
+                    variation_id: varId,
+                    name: name,
+                    price_cents: price,
+                    qty: 1,
+                    modifiers: modifiers
+                });
+            }
+            renderCart();
+        }

@@ -5,7 +5,7 @@ namespace Siappos\Shared;
 
 use PDO;
 
-final class QueueManager
+class QueueManager
 {
     public function __construct(private readonly PDO $pdo)
     {
@@ -13,32 +13,45 @@ final class QueueManager
 
     public function push(string $jobClass, array $payload): void
     {
-        $stmt = $this->pdo->prepare('INSERT INTO jobs (payload) VALUES (:payload)');
-        $stmt->execute([
-            ':payload' => json_encode([
-                'class' => $jobClass,
-                'data' => $payload
-            ], JSON_THROW_ON_ERROR)
-        ]);
+        $stmt = $this->pdo->prepare('INSERT INTO jobs (job_class, payload, created_at) VALUES (?, ?, CURRENT_TIMESTAMP)');
+        $stmt->execute([$jobClass, json_encode($payload)]);
     }
 
     public function pop(): ?array
     {
-        $stmt = $this->pdo->query('SELECT * FROM jobs ORDER BY id ASC LIMIT 1');
-        $job = $stmt->fetch(PDO::FETCH_ASSOC);
+        $this->pdo->beginTransaction();
+        try {
+            // Find oldest available job
+            $stmt = $this->pdo->prepare("SELECT * FROM jobs WHERE status = 'pending' AND attempts < max_attempts ORDER BY created_at ASC LIMIT 1");
+            $stmt->execute();
+            $job = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if ($job !== false) {
-            $stmtDel = $this->pdo->prepare('DELETE FROM jobs WHERE id = :id');
-            $stmtDel->execute([':id' => $job['id']]);
+            if (!$job) {
+                $this->pdo->rollBack();
+                return null;
+            }
 
-            $payload = json_decode((string) $job['payload'], true, 512, JSON_THROW_ON_ERROR);
-            return [
-                'id' => (int) $job['id'],
-                'class' => $payload['class'],
-                'data' => $payload['data']
-            ];
+            // Mark as processing
+            $update = $this->pdo->prepare("UPDATE jobs SET status = 'processing', reserved_at = CURRENT_TIMESTAMP WHERE id = ?");
+            $update->execute([$job['id']]);
+
+            $this->pdo->commit();
+            return $job;
+        } catch (\Exception $e) {
+            $this->pdo->rollBack();
+            return null;
         }
+    }
 
-        return null;
+    public function markCompleted(int $id): void
+    {
+        $stmt = $this->pdo->prepare("UPDATE jobs SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE id = ?");
+        $stmt->execute([$id]);
+    }
+
+    public function markFailed(int $id, string $error): void
+    {
+        $stmt = $this->pdo->prepare("UPDATE jobs SET status = 'failed', last_error = ?, attempts = attempts + 1 WHERE id = ?");
+        $stmt->execute([$error, $id]);
     }
 }

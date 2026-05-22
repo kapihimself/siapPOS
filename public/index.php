@@ -28,9 +28,7 @@ use Siappos\Domain\Transaction\DTO\PurchaseLineData;
 use Siappos\Shared\Csrf;
 use Siappos\Shared\Flash;
 use Siappos\Shared\EventBus;
-use Siappos\Shared\QueueManager;
 use Siappos\Domain\Restaurant\TableRepository;
-use Siappos\Domain\Restaurant\ResModifierRepository;
 use Siappos\Domain\Contact\ContactRepository;
 use Siappos\Domain\Accounting\Actions\RecordExpenseAction;
 
@@ -42,13 +40,21 @@ session_start();
 require_once dirname(__DIR__) . '/src/bootstrap.php';
 
 $eventBus = new EventBus();
-$queueManager = new QueueManager($pdo);
+$queueManager = new \Siappos\Shared\QueueManager($pdo);
+
+// Listen to checkout event and dispatch email job
+$eventBus->subscribe(\Siappos\Domain\Transaction\Events\TransactionCheckedOut::class, function($event) use ($queueManager) {
+    $queueManager->push('send_email_receipt', [
+        'transaction_id' => $event->transactionId,
+        'business_id' => $event->businessId
+    ]);
+});
 $userRepository = new UserRepository($pdo);
 $cashRegisterRepository = new CashRegisterRepository($pdo);
 $accountRepository = new AccountRepository($pdo);
 $reportRepository = new ReportRepository($pdo);
 $tableRepository = new TableRepository($pdo);
-$resModifierRepository = new ResModifierRepository($pdo);
+$resModifierRepository = new \Siappos\Domain\Restaurant\ResModifierRepository($pdo);
 $contactRepository = new ContactRepository($pdo);
 $categoryRepository = new CategoryRepository($pdo);
 $brandRepository = new BrandRepository($pdo);
@@ -286,6 +292,37 @@ if ($page === 'api/products' && $method === 'GET') {
     exit;
 }
 
+if ($page === 'api/product-modifiers' && $method === 'GET') {
+    $requireAuth();
+    header('Content-Type: application/json');
+    $productId = (int) ($_GET['product_id'] ?? 0);
+    if ($productId <= 0) {
+        echo json_encode([]);
+        die();
+    }
+    $modifiers = $resModifierRepository->getModifiersForProduct($productId);
+
+    // Group modifiers by set for the frontend
+    $grouped = [];
+    foreach ($modifiers as $mod) {
+        if (!isset($grouped[$mod['modifier_set_id']])) {
+            $grouped[$mod['modifier_set_id']] = [
+                'set_id' => $mod['modifier_set_id'],
+                'set_name' => $mod['set_name'],
+                'modifiers' => []
+            ];
+        }
+        $grouped[$mod['modifier_set_id']]['modifiers'][] = [
+            'id' => $mod['id'],
+            'name' => $mod['name'],
+            'price_cents' => $mod['price_cents']
+        ];
+    }
+
+    echo json_encode(array_values($grouped));
+    die();
+}
+
 if ($page === 'api/checkout' && $method === 'POST') {
     $requireAuth();
     header('Content-Type: application/json');
@@ -325,7 +362,7 @@ if ($page === 'api/checkout' && $method === 'POST') {
             (int) $activeRegister['id']
         );
 
-        $processSale = new ProcessSaleAction($pdo, $productRepository, $eventBus, clone $queueManager);
+        $processSale = new ProcessSaleAction($pdo, $productRepository, $eventBus);
         $transaction = $processSale->execute($data);
 
         echo json_encode(['success' => true, 'transaction_number' => $transaction['transaction_number']]);
@@ -797,7 +834,7 @@ if ($page === 'modifiers' && $method === 'GET') {
         'sets' => $resModifierRepository->getSets(Auth::businessId()),
         'modifierRepo' => $resModifierRepository
     ]);
-    exit;
+    die();
 }
 
 if ($page === 'modifiers/set-store' && $method === 'POST') {
@@ -824,12 +861,36 @@ if ($page === 'modifiers/item-store' && $method === 'POST') {
     Response::redirect('/?page=modifiers');
 }
 
+if ($page === 'modifiers/link-product' && $method === 'POST') {
+    $requireAuth();
+    $requireCsrf('modifiers');
+    try {
+        $resModifierRepository->linkProductToModifierSet((int)$_POST['product_id'], (int)$_POST['set_id']);
+        Flash::success('Produk berhasil ditautkan ke grup modifier.');
+    } catch (\Exception $e) {
+        Flash::error('Gagal menautkan produk. Pastikan ID produk valid.');
+    }
+    Response::redirect('/?page=modifiers');
+}
+
+if ($page === 'modifiers/unlink-product' && $method === 'POST') {
+    $requireAuth();
+    $requireCsrf('modifiers');
+    try {
+        $resModifierRepository->unlinkProductFromModifierSet((int)$_POST['product_id'], (int)$_POST['set_id']);
+        Flash::success('Tautan produk dilepas.');
+    } catch (\Exception $e) {
+        Flash::error('Gagal melepas tautan.');
+    }
+    Response::redirect('/?page=modifiers');
+}
+
 if ($page === 'invoice' && $method === 'GET') {
     $token = $_GET['token'] ?? '';
     if (!$token) {
         http_response_code(404);
         echo "Invoice tidak ditemukan.";
-        exit;
+        die();
     }
 
     $stmt = $pdo->prepare('SELECT * FROM transactions WHERE payment_token = :token LIMIT 1');
@@ -839,16 +900,14 @@ if ($page === 'invoice' && $method === 'GET') {
     if (!$transaction) {
         http_response_code(404);
         echo "Invoice tidak valid.";
-        exit;
+        die();
     }
 
-    // Pass an empty token to Csrf::verify/token if session isn't strictly needed for public,
-    // but session_start is active globally in index.php so Csrf::token() works.
     View::render('public-invoice', [
         'title' => 'Tagihan #' . $transaction['transaction_number'],
         'transaction' => $transaction
     ]);
-    exit;
+    die();
 }
 
 if ($page === 'api/pay-invoice' && $method === 'POST') {
@@ -856,7 +915,7 @@ if ($page === 'api/pay-invoice' && $method === 'POST') {
     if (!Csrf::verify($_POST['_csrf'] ?? null) || !$token) {
         http_response_code(400);
         echo "Permintaan tidak valid.";
-        exit;
+        die();
     }
 
     $stmt = $pdo->prepare('SELECT id, total_cents, payment_status FROM transactions WHERE payment_token = :token LIMIT 1');
@@ -868,13 +927,11 @@ if ($page === 'api/pay-invoice' && $method === 'POST') {
         Response::redirect('/?page=invoice&token=' . $token);
     }
 
-    // Mock successful payment
     $pdo->beginTransaction();
     try {
         $stmtUpdate = $pdo->prepare('UPDATE transactions SET payment_status = \'paid\', cash_received_cents = total_cents WHERE id = :id');
         $stmtUpdate->execute([':id' => $transaction['id']]);
 
-        // Create payment record
         $stmtPay = $pdo->prepare('INSERT INTO transaction_payments (transaction_id, amount_cents, payment_method, created_by) VALUES (:tx_id, :amount, \'custom\', 0)');
         $stmtPay->execute([
             ':tx_id' => $transaction['id'],

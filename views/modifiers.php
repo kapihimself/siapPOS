@@ -1,72 +1,150 @@
-<?php
-/** @var array<int, array<string, mixed>> $sets */
-/** @var \Siappos\Domain\Restaurant\ResModifierRepository $modifierRepo */
-/** @var string $title */
+<?php require_once 'partials/header.php'; ?>
 
-use Siappos\Shared\Csrf;
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+  <h1 class="h2">Manajemen Modifier Makanan</h1>
+</div>
 
-$formatRupiah = static fn (int $cents): string => 'Rp ' . number_format($cents / 100, 0, ',', '.');
-?>
-<div class="grid">
-    <div class="col-8">
-        <div class="panel">
-            <h2>Grup Modifier Aktif</h2>
-            <?php if (empty($sets)): ?>
-                <p class="text-center muted" style="padding: 20px;">Belum ada modifier yang dibuat.</p>
-            <?php else: ?>
-                <?php foreach ($sets as $set):
-                    $modifiers = $modifierRepo->getModifiersBySet((int)$set['id']);
-                ?>
-                    <div style="border: 1px solid var(--line); border-radius: 4px; padding: 15px; margin-bottom: 15px;">
-                        <h3 style="margin-top: 0; display: flex; justify-content: space-between;">
-                            <?= htmlspecialchars($set['name']) ?>
-                        </h3>
-                        <table class="table" style="width: 100%;">
-                            <thead>
-                                <tr>
-                                    <th>Pilihan Tambahan (Modifier)</th>
-                                    <th style="text-align: right;">Harga Tambahan</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php foreach ($modifiers as $mod): ?>
-                                    <tr>
-                                        <td><?= htmlspecialchars($mod['name']) ?></td>
-                                        <td style="text-align: right; color: #2ecc71;">+ <?= $formatRupiah((int) $mod['price_cents']) ?></td>
-                                    </tr>
-                                <?php endforeach; ?>
-                                <?php if (empty($modifiers)): ?>
-                                    <tr><td colspan="2" class="muted text-center">Belum ada pilihan di grup ini.</td></tr>
-                                <?php endif; ?>
-                            </tbody>
-                        </table>
-
-                        <!-- Form Tambah Opsi ke Grup Ini -->
-                        <form action="/?page=modifiers/item-store" method="POST" style="margin-top: 10px; display: flex; gap: 10px;">
-                            <input type="hidden" name="_csrf" value="<?= htmlspecialchars(Csrf::token()) ?>">
-                            <input type="hidden" name="set_id" value="<?= $set['id'] ?>">
-                            <input type="text" name="name" placeholder="Nama Opsi (mis: Ekstra Keju)" required style="flex: 2; padding: 6px;">
-                            <input type="number" name="price" placeholder="Harga (mis: 5000)" required style="flex: 1; padding: 6px;">
-                            <button type="submit" class="btn btn-primary" style="padding: 6px 12px;">Tambah Opsi</button>
-                        </form>
+<div class="row">
+    <!-- Kolom Kiri: Grup Modifier -->
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Grup Modifier</h5>
+                <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addSetModal">Tambah Grup</button>
+            </div>
+            <div class="card-body">
+                <?php if (empty($sets)): ?>
+                    <p class="text-muted">Belum ada grup modifier.</p>
+                <?php else: ?>
+                    <div class="accordion" id="modifierAccordion">
+                        <?php foreach ($sets as $index => $set): ?>
+                            <?php $modifiers = $modifierRepo->getModifiersInSet((int)$set['id']); ?>
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="heading_<?= $set['id'] ?>">
+                                    <button class="accordion-button <?= $index === 0 ? '' : 'collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#collapse_<?= $set['id'] ?>">
+                                        <?= htmlspecialchars((string)$set['name']) ?>
+                                    </button>
+                                </h2>
+                                <div id="collapse_<?= $set['id'] ?>" class="accordion-collapse collapse <?= $index === 0 ? 'show' : '' ?>" data-bs-parent="#modifierAccordion">
+                                    <div class="accordion-body">
+                                        <div class="mb-3 text-end">
+                                             <button class="btn btn-sm btn-outline-success btn-add-mod" data-set-id="<?= $set['id'] ?>" data-bs-toggle="modal" data-bs-target="#addModifierModal">Tambah Opsi</button>
+                                             <button class="btn btn-sm btn-outline-info btn-link-prod" data-set-id="<?= $set['id'] ?>" data-bs-toggle="modal" data-bs-target="#linkProductModal">Tautkan Produk</button>
+                                        </div>
+                                        <ul class="list-group">
+                                            <?php foreach ($modifiers as $mod): ?>
+                                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                    <?= htmlspecialchars((string)$mod['name']) ?>
+                                                    <span class="badge bg-secondary rounded-pill"><?= \Siappos\Shared\Money::format((int)$mod['price_cents']) ?></span>
+                                                </li>
+                                            <?php endforeach; ?>
+                                            <?php if(empty($modifiers)): ?>
+                                                <li class="list-group-item text-muted">Belum ada opsi</li>
+                                            <?php endif; ?>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
                     </div>
-                <?php endforeach; ?>
-            <?php endif; ?>
-        </div>
-    </div>
-
-    <div class="col-4">
-        <div class="panel panel-accent">
-            <h3>Buat Grup Modifier Baru</h3>
-            <p class="muted" style="font-size: 0.9em;">Grup Modifier digunakan untuk mengelompokkan pilihan, misal "Topping Minuman" atau "Tingkat Kepedasan".</p>
-            <form action="/?page=modifiers/set-store" method="POST">
-                <input type="hidden" name="_csrf" value="<?= htmlspecialchars(Csrf::token()) ?>">
-                <div style="margin-bottom: 10px;">
-                    <label>Nama Grup</label>
-                    <input type="text" name="name" placeholder="Misal: Topping Pizza" required style="width: 100%; padding: 8px; box-sizing: border-box;">
-                </div>
-                <button type="submit" class="btn btn-primary" style="width: 100%;">Buat Grup</button>
-            </form>
+                <?php endif; ?>
+            </div>
         </div>
     </div>
 </div>
+
+<!-- Modal Tambah Grup -->
+<div class="modal fade" id="addSetModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form action="/?page=modifiers/set-store" method="POST">
+          <div class="modal-header">
+            <h5 class="modal-title">Tambah Grup Modifier</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+             <?php \Siappos\Shared\Csrf::token('modifiers'); ?>
+             <div class="mb-3">
+                 <label>Nama Grup (cth: Topping Pizza)</label>
+                 <input type="text" name="name" class="form-control" required>
+             </div>
+          </div>
+          <div class="modal-footer">
+            <button type="submit" class="btn btn-primary">Simpan</button>
+          </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Tambah Opsi -->
+<div class="modal fade" id="addModifierModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form action="/?page=modifiers/item-store" method="POST">
+          <div class="modal-header">
+            <h5 class="modal-title">Tambah Opsi Modifier</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+             <?php \Siappos\Shared\Csrf::token('modifiers'); ?>
+             <input type="hidden" name="set_id" id="mod_set_id" value="">
+             <div class="mb-3">
+                 <label>Nama Opsi (cth: Keju Extra)</label>
+                 <input type="text" name="name" class="form-control" required>
+             </div>
+             <div class="mb-3">
+                 <label>Harga Tambahan (Rp)</label>
+                 <input type="number" name="price" class="form-control" value="0" required>
+             </div>
+          </div>
+          <div class="modal-footer">
+            <button type="submit" class="btn btn-primary">Simpan</button>
+          </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Tautkan Produk -->
+<div class="modal fade" id="linkProductModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form action="/?page=modifiers/link-product" method="POST">
+          <div class="modal-header">
+            <h5 class="modal-title">Tautkan ke Produk</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+             <?php \Siappos\Shared\Csrf::token('modifiers'); ?>
+             <input type="hidden" name="set_id" id="link_set_id" value="">
+             <div class="mb-3">
+                 <label>ID Produk</label>
+                 <input type="number" name="product_id" class="form-control" required placeholder="Masukkan ID Produk">
+                 <small class="text-muted">Cari ID di menu Produk.</small>
+             </div>
+          </div>
+          <div class="modal-footer">
+            <button type="submit" class="btn btn-primary">Tautkan</button>
+          </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.btn-add-mod').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.getElementById('mod_set_id').value = this.dataset.setId;
+        });
+    });
+    document.querySelectorAll('.btn-link-prod').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.getElementById('link_set_id').value = this.dataset.setId;
+        });
+    });
+});
+</script>
+
+<?php require_once 'partials/footer.php'; ?>

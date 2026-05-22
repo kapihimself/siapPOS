@@ -17,7 +17,6 @@ final class ProcessSaleAction
         private readonly PDO $pdo,
         private readonly ProductRepository $products,
         private readonly EventBus $eventBus,
-        private readonly ?\Siappos\Shared\QueueManager $queueManager = null,
     ) {
     }
 
@@ -42,14 +41,7 @@ final class ProcessSaleAction
                 }
 
                 $priceCents = (int) $product['price_cents'];
-                $modifiersTotalCents = 0;
-                foreach ($item->modifiers as $mod) {
-                    $modifiersTotalCents += (int) $mod['price_cents'];
-                }
-
-                // Add modifiers total to base price before multiplying by qty
-                $effectivePriceCents = $priceCents + $modifiersTotalCents;
-                $lineTotal = (int) ($effectivePriceCents * $item->qty);
+                $lineTotal = (int) ($priceCents * $item->qty);
                 $subtotalCents += $lineTotal;
 
                 $lines[] = [
@@ -57,9 +49,8 @@ final class ProcessSaleAction
                     'variation_id' => $item->variationId,
                     'product_name' => (string) $product['name'],
                     'qty' => $item->qty,
-                    'unit_price_cents' => $effectivePriceCents,
+                    'unit_price_cents' => $priceCents,
                     'line_total_cents' => $lineTotal,
-                    'modifiers' => $item->modifiers
                 ];
             }
 
@@ -78,8 +69,6 @@ final class ProcessSaleAction
 
             // 3. Buat transaksi utama
             $transactionNumber = 'TRX-' . date('YmdHis') . '-' . random_int(100, 999);
-            // Simulate UUID v4 for payment token (native PHP 8 doesn't have a built-in generator so we mock a secure enough random string)
-            $paymentToken = bin2hex(random_bytes(16));
 
             $paymentStatus = 'paid';
             if ($data->cashReceivedCents < $totalCents) {
@@ -92,13 +81,13 @@ final class ProcessSaleAction
                     commission_agent_id, res_table_id,
                     subtotal_cents, discount_type, discount_value, discount_cents,
                     tax_rate, tax_cents, total_cents, payment_status, payment_method,
-                    cash_received_cents, change_cents, payment_token, created_by
+                    cash_received_cents, change_cents, created_by
                 ) VALUES (
                     :business_id, :cash_register_id, :transaction_number, :type, :status, :contact_id,
                     :commission_agent_id, :res_table_id,
                     :subtotal_cents, :discount_type, :discount_value, :discount_cents,
                     :tax_rate, :tax_cents, :total_cents, :payment_status, :payment_method,
-                    :cash_received_cents, :change_cents, :payment_token, :created_by
+                    :cash_received_cents, :change_cents, :created_by
                 )'
             );
 
@@ -122,7 +111,6 @@ final class ProcessSaleAction
                 ':payment_method' => $data->paymentMethod,
                 ':cash_received_cents' => $data->cashReceivedCents,
                 ':change_cents' => $changeCents,
-                ':payment_token' => $paymentToken,
                 ':created_by' => $data->actorUserId,
             ]);
 
@@ -171,14 +159,6 @@ final class ProcessSaleAction
                 )'
             );
 
-            $stmtModifier = $this->pdo->prepare(
-                'INSERT INTO transaction_sell_line_modifiers (
-                    sell_line_id, modifier_id, modifier_name, modifier_price_cents
-                ) VALUES (
-                    :sell_line_id, :modifier_id, :modifier_name, :modifier_price_cents
-                )'
-            );
-
             foreach ($lines as $line) {
                 // Insert Sell Line
                 $stmtLine->execute([
@@ -192,13 +172,17 @@ final class ProcessSaleAction
                 ]);
                 $sellLineId = (int) $this->pdo->lastInsertId();
 
-                foreach ($line['modifiers'] as $mod) {
-                    $stmtModifier->execute([
-                        ':sell_line_id' => $sellLineId,
-                        ':modifier_id' => $mod['id'],
-                        ':modifier_name' => $mod['name'],
-                        ':modifier_price_cents' => $mod['price_cents'],
-                    ]);
+                // Insert modifiers
+                if (!empty($line['modifiers'])) {
+                    $stmtModInsert = $this->pdo->prepare('INSERT INTO transaction_sell_line_modifiers (sell_line_id, modifier_id, modifier_name, modifier_price_cents) VALUES (?, ?, ?, ?)');
+                    foreach ($line['modifiers'] as $modId) {
+                        $stmtFetchMod = $this->pdo->prepare('SELECT name, price_cents FROM res_modifiers WHERE id = ?');
+                        $stmtFetchMod->execute([$modId]);
+                        $modData = $stmtFetchMod->fetch();
+                        if ($modData) {
+                            $stmtModInsert->execute([$sellLineId, $modId, $modData['name'], $modData['price_cents']]);
+                        }
+                    }
                 }
 
                 // Hanya kurangi stok jika status checkout final/checked_out (bukan draft/suspended)
@@ -250,14 +234,6 @@ final class ProcessSaleAction
                 paymentMethod: $data->paymentMethod,
                 userId: $data->actorUserId,
             ));
-
-            if ($this->queueManager !== null) {
-                $this->queueManager->push('SendEmailReceipt', [
-                    'transactionId' => $transactionId,
-                    'transactionNumber' => $transactionNumber,
-                    'contactId' => $data->contactId
-                ]);
-            }
 
             return [
                 'id' => $transactionId,

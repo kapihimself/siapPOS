@@ -1,75 +1,64 @@
-<?php
-/** @var array<string, mixed> $transaction */
-/** @var string $title */
-
-use Siappos\Shared\Csrf;
-
-$formatRupiah = static fn (int $cents): string => 'Rp ' . number_format($cents / 100, 0, ',', '.');
-$isPaid = $transaction['payment_status'] === 'paid';
-?>
-<!doctype html>
+<!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($title) ?> - SiapPOS</title>
-    <link rel="stylesheet" href="/assets/app.css">
+    <title><?= htmlspecialchars($title) ?></title>
+    <link href="/assets/app.css" rel="stylesheet">
     <style>
-        body { background-color: #f4f6f8; }
-        .invoice-box { max-width: 800px; margin: 40px auto; padding: 30px; background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-        .invoice-header { display: flex; justify-content: space-between; margin-bottom: 30px; border-bottom: 2px solid #eee; padding-bottom: 20px; }
-        .status-badge { padding: 6px 12px; border-radius: 20px; font-weight: bold; font-size: 14px; text-transform: uppercase; }
-        .status-paid { background: #e8f5e9; color: #2e7d32; }
-        .status-due { background: #ffebee; color: #c62828; }
+        body { background-color: #f8f9fa; }
+        .invoice-box {
+            max-width: 800px;
+            margin: 40px auto;
+            background: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
     </style>
 </head>
 <body>
-<div class="invoice-box">
-    <div class="invoice-header">
-        <div>
-            <h2>Tagihan / Invoice</h2>
-            <p class="muted">No: <strong><?= htmlspecialchars($transaction['transaction_number']) ?></strong></p>
-            <p class="muted">Tanggal: <?= (new DateTime($transaction['created_at']))->format('d F Y H:i') ?></p>
-        </div>
-        <div style="text-align: right;">
-            <span class="status-badge <?= $isPaid ? 'status-paid' : 'status-due' ?>">
-                <?= $isPaid ? 'LUNAS' : 'BELUM LUNAS' ?>
-            </span>
-            <h1 style="margin-top: 15px;"><?= $formatRupiah((int) $transaction['total_cents']) ?></h1>
-        </div>
-    </div>
 
-    <?php if (!$isPaid): ?>
-        <div style="background: #eef5ff; padding: 20px; border-radius: 4px; margin-bottom: 30px; text-align: center; border: 1px solid #b6d4fe;">
-            <h3>Bayar Tagihan Ini Secara Online</h3>
-            <p class="muted">Anda dapat membayar tagihan ini menggunakan kartu kredit atau e-wallet (Mock).</p>
-            <form action="/?page=api/pay-invoice" method="POST">
-                <input type="hidden" name="_csrf" value="<?= htmlspecialchars(Csrf::token()) ?>">
-                <input type="hidden" name="token" value="<?= htmlspecialchars($transaction['payment_token']) ?>">
-                <button type="submit" class="btn btn-primary" style="font-size: 18px; padding: 12px 24px;">Bayar Sekarang dengan Midtrans/Stripe</button>
-            </form>
+<div class="container">
+    <div class="invoice-box">
+        <?php \Siappos\Shared\Flash::display(); ?>
+
+        <div class="text-center mb-4">
+            <h2>Tagihan: <?= htmlspecialchars((string)$transaction['transaction_number']) ?></h2>
+            <p class="text-muted">Tanggal: <?= date('d M Y H:i', strtotime($transaction['created_at'])) ?></p>
         </div>
-    <?php endif; ?>
 
-    <table class="table" style="width: 100%;">
-        <thead>
-            <tr>
-                <th>Produk</th>
-                <th style="text-align: right;">Total</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr>
-                <td>Total Belanja Sesuai Struk</td>
-                <td style="text-align: right; font-weight: bold;"><?= $formatRupiah((int) $transaction['total_cents']) ?></td>
-            </tr>
-        </tbody>
-    </table>
+        <div class="row mb-4">
+            <div class="col-sm-6">
+                <strong>Status Pembayaran:</strong><br>
+                <?php if ($transaction['payment_status'] === 'paid'): ?>
+                    <span class="badge bg-success fs-6">LUNAS</span>
+                <?php else: ?>
+                    <span class="badge bg-warning text-dark fs-6">BELUM LUNAS</span>
+                <?php endif; ?>
+            </div>
+            <div class="col-sm-6 text-end">
+                <strong>Total Tagihan:</strong><br>
+                <span class="fs-4 fw-bold"><?= \Siappos\Shared\Money::format((int)$transaction['total_cents']) ?></span>
+            </div>
+        </div>
 
-    <div style="text-align: center; margin-top: 40px; color: #888; font-size: 14px;">
-        <p>Terima kasih atas kepercayaan Anda.</p>
-        <p>Ditenagai oleh SiapPOS.</p>
+        <?php if ($transaction['payment_status'] !== 'paid'): ?>
+            <div class="card bg-light mt-4">
+                <div class="card-body text-center">
+                    <h5>Bayar Tagihan Secara Online</h5>
+                    <p class="text-muted">Gunakan gateway pembayaran kami yang aman.</p>
+                    <form action="/?page=api/pay-invoice" method="POST">
+                        <?php \Siappos\Shared\Csrf::token(); ?>
+                        <input type="hidden" name="token" value="<?= htmlspecialchars((string)$transaction['payment_token']) ?>">
+                        <button type="submit" class="btn btn-primary btn-lg">Bayar Sekarang MOCK</button>
+                    </form>
+                </div>
+            </div>
+        <?php endif; ?>
     </div>
 </div>
+
+<script src="/assets/app.js"></script>
 </body>
 </html>

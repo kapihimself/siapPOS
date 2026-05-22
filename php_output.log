@@ -1,28 +1,25 @@
-[Fri May 15 17:54:11 2026] PHP 8.3.6 Development Server (http://127.0.0.1:8088) started
-[Fri May 15 17:57:06 2026] 127.0.0.1:38988 Accepted
-[Fri May 15 17:57:06 2026] PHP Fatal error:  Uncaught PDOException: SQLSTATE[HY000]: General error: 1 no such column: payment_token in /app/public/index.php:835
-Stack trace:
-#0 /app/public/index.php(835): PDO->prepare()
-#1 {main}
-  thrown in /app/public/index.php on line 835
-[Fri May 15 17:57:06 2026] 127.0.0.1:38988 [500]: GET /?page=invoice&token=invalid - Uncaught PDOException: SQLSTATE[HY000]: General error: 1 no such column: payment_token in /app/public/index.php:835
-Stack trace:
-#0 /app/public/index.php(835): PDO->prepare()
-#1 {main}
-  thrown in /app/public/index.php on line 835
-[Fri May 15 17:57:06 2026] 127.0.0.1:38988 Closing
-[Fri May 15 18:07:01 2026] 127.0.0.1:44336 Accepted
-[Fri May 15 18:07:01 2026] PHP Fatal error:  Uncaught PDOException: SQLSTATE[HY000]: General error: 1 no such column: payment_token in /app/public/index.php:835
-Stack trace:
-#0 /app/public/index.php(835): PDO->prepare()
-#1 {main}
-  thrown in /app/public/index.php on line 835
-[Fri May 15 18:07:01 2026] 127.0.0.1:44336 [500]: GET /?page=invoice&token=invalid - Uncaught PDOException: SQLSTATE[HY000]: General error: 1 no such column: payment_token in /app/public/index.php:835
-Stack trace:
-#0 /app/public/index.php(835): PDO->prepare()
-#1 {main}
-  thrown in /app/public/index.php on line 835
-[Fri May 15 18:07:01 2026] 127.0.0.1:44336 Closing
-[Fri May 15 18:11:25 2026] 127.0.0.1:50792 Accepted
-[Fri May 15 18:11:25 2026] 127.0.0.1:50792 [404]: GET /?page=invoice&token=invalid
-[Fri May 15 18:11:25 2026] 127.0.0.1:50792 Closing
+[Thu May 14 06:18:40 2026] PHP 8.3.6 Development Server (http://127.0.0.1:8088) started
+[Thu May 14 06:19:16 2026] 127.0.0.1:47540 Accepted
+[Thu May 14 06:19:16 2026] 127.0.0.1:47540 [302]: GET /?page=pos/z-report&id=1
+[Thu May 14 06:19:16 2026] 127.0.0.1:47540 Closing
+[Thu May 14 06:21:57 2026] 127.0.0.1:47154 Accepted
+[Thu May 14 06:21:57 2026] 127.0.0.1:47154 [404]: GET /?page=contacts/pay
+[Thu May 14 06:21:57 2026] 127.0.0.1:47154 Closing
+[Thu May 14 06:22:31 2026] 127.0.0.1:50242 Accepted
+[Thu May 14 06:22:31 2026] 127.0.0.1:50242 [302]: POST /?page=contacts/pay
+[Thu May 14 06:22:31 2026] 127.0.0.1:50242 Closing
+[Thu May 14 15:52:05 2026] 127.0.0.1:41418 Accepted
+[Thu May 14 15:52:05 2026] 127.0.0.1:41418 [302]: GET /?page=reports
+[Thu May 14 15:52:05 2026] 127.0.0.1:41418 Closing
+[Thu May 14 15:52:37 2026] 127.0.0.1:44006 Accepted
+[Thu May 14 15:52:37 2026] 127.0.0.1:44006 [404]: POST /?page=login/submit
+[Thu May 14 15:52:37 2026] 127.0.0.1:44006 Closing
+[Thu May 14 15:53:05 2026] 127.0.0.1:43348 Accepted
+[Thu May 14 15:53:05 2026] 127.0.0.1:43348 [200]: GET /?page=login
+[Thu May 14 15:53:05 2026] 127.0.0.1:43348 Closing
+[Thu May 14 15:58:34 2026] 127.0.0.1:44106 Accepted
+[Thu May 14 15:58:34 2026] 127.0.0.1:44106 [200]: GET /?page=login
+[Thu May 14 15:58:34 2026] 127.0.0.1:44106 Closing
+[Thu May 14 15:58:34 2026] 127.0.0.1:44122 Accepted
+[Thu May 14 15:58:34 2026] 127.0.0.1:44122 [404]: POST /?page=login/submit
+[Thu May 14 15:58:34 2026] 127.0.0.1:44122 Closing
