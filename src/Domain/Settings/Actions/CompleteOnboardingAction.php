@@ -12,9 +12,10 @@ final class CompleteOnboardingAction
     {
     }
 
-    public function execute(OnboardingData $data): void
+    public function execute(OnboardingData $data, int $businessId): void
     {
         $this->settings->updateOnboarding(
+            businessId: $businessId,
             businessName: $data->businessName,
             outletName: $data->outletName,
             template: $data->template,

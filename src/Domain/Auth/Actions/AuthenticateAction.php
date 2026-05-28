@@ -27,6 +27,7 @@ final class AuthenticateAction
 
         return [
             'id' => (int) $user['id'],
+            'business_id' => (int) $user['business_id'],
             'username' => (string) $user['username'],
             'full_name' => (string) $user['full_name'],
             'role' => (string) $user['role'],

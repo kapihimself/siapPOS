@@ -14,6 +14,7 @@ final class Auth
 
         $_SESSION['auth_user'] = [
             'id' => (int) $user['id'],
+            'business_id' => (int) ($user['business_id'] ?? 0),
             'username' => (string) $user['username'],
             'full_name' => (string) $user['full_name'],
             'role' => (string) $user['role'],
@@ -49,6 +50,13 @@ final class Auth
         $user = self::user();
 
         return (int) ($user['id'] ?? 0);
+    }
+
+    public static function businessId(): int
+    {
+        $user = self::user();
+
+        return (int) ($user['business_id'] ?? 0);
     }
 
     public static function role(): string
