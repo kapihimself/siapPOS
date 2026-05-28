@@ -167,6 +167,14 @@ if ($page === 'try-demo' && $method === 'POST') {
     Response::redirect('/?page=dashboard');
 }
 
+if ($page === 'docs' && $method === 'GET') {
+    $requireAuth();
+    View::render('docs', [
+        'title' => 'Buku Pintar SiapPOS',
+    ]);
+    die();
+}
+
 if ($page === 'onboarding' && $method === 'GET') {
     $requireAuth();
 

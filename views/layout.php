@@ -33,6 +33,7 @@ $user = Auth::user();
                 <?php if (in_array((string) $user['role'], ['admin', 'manager'], true)): ?>
                     <a href="/?page=onboarding">Setup Bisnis</a>
                 <?php endif; ?>
+                <a href="/?page=docs">Manual & Panduan (Buku Pintar)</a>
                 <a href="/?page=logout" class="btn btn-danger">Logout</a>
             <?php else: ?>
                 <a href="/?page=login" class="btn btn-primary">Masuk</a>
